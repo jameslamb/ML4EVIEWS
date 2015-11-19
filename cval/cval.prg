@@ -38,12 +38,12 @@ logmsg
 		%pagesmpl = @pagesmpl
 		%pagename = @pagename
 		%command = {%eq}.@command 'command to re-estimate (with all the same options)
-		%dep = @makevalidname(@word({%eq}.@spec,1)) 'dependent variable (incl. transformations) --> used mostly for naming
 		
+		pageselect {%pagename}
 		{%eq}.makeregs g1
 		%base_dep = @word(g1.@depends,1) 'dependent variable WITHOUT transformations
 		delete g1
-		
+				
 		%start_est = @word(%longest_smpl,1) 'where should estimation start?
 		%end_est = @word(%longest_smpl,2) 'where should the longest estimation end?
 		!tot_eqs = @dtoo(%end_est) - @dtoo(%short_end) 'number of estiamtions we'll do
@@ -52,12 +52,13 @@ logmsg
 	
 		%newpage = "TMPAAAAA" 'give it a ridiculous name to avoid overwriting stuff
 		pagecreate(page={%newpage}) {%freq} {%pagesmpl} 'give it a crazy name to minimize risk of overwriting things
-		pageselect {%pagename}
+		pageselect {%newpage}
 		
 		'Create a group of regressors and copy it over
 		'NOTE: This will take only the base series. If the reg. has CPI and d(CPI), only CPI is copied
+		pageselect {%pagename}
 		%rgroup = "g_blahblah"
-		{%eq}.makeregs {%rgroups}
+		{%eq}.makeregs {%rgroup}
 			{%rgroup}.drop @trend @trend^2 log(@trend)
 		copy(g=d) {%pagename}\{%rgroup} {%newpage}\{%rgroup} '(g=d) --> series only (not the group object
 		
@@ -90,10 +91,10 @@ logmsg
 		
 		for !i = 0 to !tot_eqs-1
 			
-			'Estiamte the model for this sample
+			'Estimate the model for this sample
 			%end_est = @datestr(@dateadd(@dateval(%short_end), +{!i}, %freq), date_fmt)
 			%est_smpl = %start_est + " " + %end_est
-			logmsg --- Estiamting {%eq} over sample %est_smpl
+			logmsg --- Estimating {%eq} over sample %est_smpl
 			
 			smpl {%est_smpl}
 				{%eq}.{%command} 're-estimates the equation
@@ -102,16 +103,16 @@ logmsg
 			%start_fcst = @datestr(@dateadd(@dateval(%end_est), +1, %freq), date_fmt)
 			
 			smpl {%start_fcst} @last
-				{%eq}.forecast(f=na) {%dep}_f_{%start_fcst}
+				{%eq}.forecast(f=na) {%base_dep}_f_{%start_fcst}
 			smpl @all
 		next
 			
 	logmsg --- Creating Series and Vectors of Errors
 	
-		%lookups = %dep + "_F_*"
+		%lookup = %base_dep + "_F_*"
 		%list = @wlookup(%lookup, "series")
 		for %series {%list}
-			%prefx = %dep + "_F_*"
+			%prefx = %base_dep + "_F_"
 			%error_ser = @replace(%series, %prefx, "ERR_")
 			%error_vec = @replace(%series, %prefx, "V_ERR_")
 			smpl @all
@@ -157,7 +158,7 @@ logmsg
 		t_acc(4,1) = %eq
 		%err_txt = %err_measure + ":"
 		t_acc(4,2) = %err_txt
-		for !col = 3 to (@wcoount(%err_vecs)+2)
+		for !col = 3 to (@wcount(%err_vecs)+2)
 			
 			'Assign a header to the table indicating how many steps ahead
 			%head = @str(!col - 2)
@@ -166,11 +167,11 @@ logmsg
 			'How many forecasts did we have at this horizon?
 			%vec = "E_VEC_" + %head
 			!obs = @obs({%vec})
-			t_acc(3, !col)) = @str(!obs)
+			t_acc(3, !col) = @str(!obs)
 			
 			'How did they do?
 			!MAE = @mean(@abs({%vec}))
-			!MSE = @mean(@epoq({%vec},2))
+			!MSE = @mean(@epow({%vec},2))
 			!RMSE = @sqrt(!MSE)
 			t_acc(4,!col) =!{%err_measure}
 		next
@@ -185,7 +186,7 @@ logmsg
 		delete e_vec_* date_fmt* err_* v_err_* *obsid*
 		
 		if @upper(%keep_fcst) <> "TRUE" and @upper(%keep_fcst) <> "T" then
-			delete {%dep}_f_*
+			delete {%base_dep}_f_*
 		endif
 		
 	logmsg --- Creating a single vector of errors
@@ -212,15 +213,6 @@ logmsg
 		
 '##########################################################################################################
 '##########################################################################################################
-'##########################################################################################################		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
+'##########################################################################################################
+
 

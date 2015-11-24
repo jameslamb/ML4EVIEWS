@@ -6,7 +6,8 @@
 ' 	Program which takes an equation, rolls teh sample, keeps producing forecasts,
 ' 	then stacks up vectors by horizon and computes errors at different horizons.
 ' 	Returns a few objects in the wf:
-'		1. T_ACC --> a table with the eq name and error (MSE or MAE) by forecast horizon
+'		1. T_ACC --> a table with the eq name and error (see below) by forecast horizon
+
 
 '##########################################################################################################
 '##########################################################################################################
@@ -30,7 +31,19 @@ logmsg
 		%eq = {%0} 'equation object to work with
 		%short_end = {%1} 'end of the shortest sample to forecast over
 		%longest_smpl = {%2} 'What is the longest sample to estiamte? e.g. "1990 2015M10"
-		%err_measure = {%3} 'what error measure do you prefer? Options are "MAE", "MSE", "RMSE"
+		%err_measure = {%3} 'what error measure do you prefer? 
+			'Valid options:
+'				a. "MSE" = mean squared error
+'				b. "MAE" = mean absolute error
+'				c. "RMSE" = root mean squuared error
+'				d. "MSFE" = mean squared forecast error
+'				e. "MAPE" = mean absolute percent error
+'				f. "MPE" = mean percentage error
+'				g. "MSPE" = mean squared percentage error
+'				h. "RMSPE" = root mean squared percentage error
+'				i. "SIGN" = count of the number of times the forecast guess the correct direction of change
+'				j. "SIGN_PERCENT" = percent of the times that we guessed the sign of the forecast correctly
+			
 		%keep_fcst = {%4} 'Set to "TRUE" or "T" to avoid deleting the forecast series
 		
 		'--- Environment ---'
@@ -61,6 +74,9 @@ logmsg
 		{%eq}.makeregs {%rgroup}
 			{%rgroup}.drop @trend @trend^2 log(@trend)
 		copy(g=d) {%pagename}\{%rgroup} {%newpage}\{%rgroup} '(g=d) --> series only (not the group object
+		
+		'delete that group
+		delete {%pagename}\{%rgroup}
 		
 		copy {%pagename}\{%eq} {%newpage}\{%eq}
 		pageselect {%newpage}
@@ -113,16 +129,41 @@ logmsg
 		%list = @wlookup(%lookup, "series")
 		for %series {%list}
 			%prefx = %base_dep + "_F_"
+			
+			'Absolute errors
 			%error_ser = @replace(%series, %prefx, "ERR_")
 			%error_vec = @replace(%series, %prefx, "V_ERR_")
 			smpl @all
 				series {%error_ser} = {%base_dep} - {%series} 'prediction is always of the level, not the transformation!
 				vector {%error_vec} = @convert({%error_ser})
 			smpl @all
+			
+			'Percentage errors
+			%pc_error_ser = @replace(%series, %prefx, "ERR_PC_") 'percentage error
+			%pc_error_vec = @replace(%series, %prefx, "V_PCERR_") 'percentage error
+			smpl @all
+				series {%pc_error_ser} = 100*({%base_dep} - {%series})/({%base_dep}) 'report in percentage point units (thus the *100)
+				vector {%pc_error_vec} = @convert({%pc_error_ser})
+			smpl @all
+			
+			'Sign errors
+			%sign_error_ser = @replace(%series, %prefx, "ERR_SGN_") 'percentage error
+			%sign_error_vec = @replace(%series, %prefx, "V_SGNERR_") 'percentage error
+			smpl @all
+				'Get a series of changes for the denominator
+				series changes = d({%base_dep})
+				changes = @recode(changes=0, 1e-03, changes) 'recode 0s to small positive (want to treat  0 as positive)
+				
+				'If change in fcst and change in actual are in the same direction, the sign was correct
+				series {%sign_error_ser} = (({%series}- {%base_dep}(-1)) / changes) > 0 '1 if correct sign, 0 otherwise
+				vector {%sign_error_vec} = @convert({%sign_error_ser})
+			smpl @all
+			
 		next
-		
-	logmsg --- Collecting the n-step-ahead errors
 	
+	logmsg --- Collecting the n-step-ahead errors
+		
+		'Absolute errors
 		%list = @wlookup("v_err_*", "vector")
 		for %vector {%list}
 			
@@ -146,7 +187,57 @@ logmsg
 				endif
 			next
 		next
+		
+		'Percent errors
+		%list = @wlookup("v_pcerr_*", "vector")
+		for %vector {%list}
 			
+			for !indx = 1 to @wcount(%list)
+				%newvec = "e_pcvec_" + @str(!indx)
+				if @isobject(%newvec) = 0 then
+					'create them
+					vector(@wcount(%list)) {%newvec} = NA
+					
+					'Add metadata
+					%desc = "Vector of " + @str(!indx) + "-step-ahead forecasts from equation " + %eq
+					{%newvec}.setattr(Description) {%desc}
+					
+					'Fill the first element of the vector
+					{%newvec}(1) = {%vector}(!indx)
+				else
+					!next_row = @obs({%newvec}) + 1
+					if @obs({%vector}) >= !indx then
+						{%newvec}(!next_row) = {%vector}(!indx)
+					endif
+				endif
+			next
+		next
+
+		'Sign errors
+		%list = @wlookup("v_sgnerr_*", "vector")
+		for %vector {%list}
+			
+			for !indx = 1 to @wcount(%list)
+				%newvec = "e_sgnvec_" + @str(!indx)
+				if @isobject(%newvec) = 0 then
+					'create them
+					vector(@wcount(%list)) {%newvec} = NA
+					
+					'Add metadata
+					%desc = "Vector of " + @str(!indx) + "-step-ahead forecasts from equation " + %eq
+					{%newvec}.setattr(Description) {%desc}
+					
+					'Fill the first element of the vector
+					{%newvec}(1) = {%vector}(!indx)
+				else
+					!next_row = @obs({%newvec}) + 1
+					if @obs({%vector}) >= !indx then
+						{%newvec}(!next_row) = {%vector}(!indx)
+					endif
+				endif
+			next
+		next
+	
 	logmsg --- Creating the Forecast Eval table
 	
 		table t_acc
@@ -166,13 +257,29 @@ logmsg
 			
 			'How many forecasts did we have at this horizon?
 			%vec = "E_VEC_" + %head
+			%pc_vec = "E_PCVEC_" + %head 'percentage errors
+			%sign_vec = "E_SGNVEC_" + %head
 			!obs = @obs({%vec})
 			t_acc(3, !col) = @str(!obs)
 			
 			'How did they do?
+			
+			'Absolute errors
 			!MAE = @mean(@abs({%vec}))
 			!MSE = @mean(@epow({%vec},2))
+			!MSFE = !MSE  'some people use different terms
 			!RMSE = @sqrt(!MSE)
+			
+			'Percentage errors
+			!MAPE = @mean(@abs({%pc_vec}))
+			!MPE = @mean({%pc_vec})
+			!MSPE = @mean(@epow({%pc_vec},2))
+			!RMSPE = @sqrt(!MSPE)
+			
+			'Sign Errors
+			!SIGN = @sum({%sign_vec})
+			!SIGN_PERCENT = 100*(!SIGN/@obs({%sign_vec}))
+			
 			t_acc(4,!col) =!{%err_measure}
 		next
 		!cols = @columns(t_acc)
@@ -214,5 +321,9 @@ logmsg
 '##########################################################################################################
 '##########################################################################################################
 '##########################################################################################################
-
+'===========================================References===================================================='
+'
+'1. http://faculty.smu.edu/tfomby/eco5385/lecture/Scoring%20Measures%20for%20Prediction%20Problems.pdf
+'2. http://robjhyndman.com/hyndsight/tscvexample/
+'3. http://robjhyndman.com/hyndsight/crossvalidation/
 

@@ -38,7 +38,7 @@
 			
 			%endhist = INDPRO.@last
 			%longest_smpl = "1920 " + %endhist
-			exec %CVAL %eq "2002M01" %longest_smpl  "MAE" "FALSE"
+			exec %CVAL %eq "2014M01" %longest_smpl  "MAE" "FALSE"
 			
 			'build up the table of errors
 			%main_tbl = "T_FCST_ACC"

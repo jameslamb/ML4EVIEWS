@@ -7,7 +7,7 @@
 ' 	then stacks up vectors by horizon and computes errors at different horizons.
 ' 	Returns a few objects in the wf:
 '		1. T_ACC --> a table with the eq name and error (see below) by forecast horizon
-
+'		2. V_{%EQ}_{%ERR_MEASURE} --> a vector for the given equation, where element 1 is 1-step-ahead, elem 2 is 2-step, etc.
 
 '##########################################################################################################
 '##########################################################################################################
@@ -160,7 +160,7 @@ logmsg
 			smpl @all
 			
 		next
-	
+		
 	logmsg --- Collecting the n-step-ahead errors
 		
 		'Absolute errors
@@ -212,7 +212,7 @@ logmsg
 				endif
 			next
 		next
-
+		
 		'Sign errors
 		%list = @wlookup("v_sgnerr_*", "vector")
 		for %vector {%list}
@@ -237,7 +237,7 @@ logmsg
 				endif
 			next
 		next
-	
+		
 	logmsg --- Creating the Forecast Eval table
 	
 		table t_acc
@@ -290,7 +290,7 @@ logmsg
 	
 	logmsg --- Cleaning up intermediate forecasting variables
 	
-		delete e_vec_* date_fmt* err_* v_err_* *obsid*
+		delete e_vec_* date_fmt* err_* v_err_* *obsid* e_pc* *sgn* *_pcerr_* *tmp* changes*
 		
 		if @upper(%keep_fcst) <> "TRUE" and @upper(%keep_fcst) <> "T" then
 			delete {%base_dep}_f_*
@@ -300,10 +300,10 @@ logmsg
 	
 		'Element 1 will be 1-step-ahead MSE, element 2 will be 2-step-ahead-MSE, etc.
 		!steps = @columns(t_acc) - 2
-		vector(!steps) v_eq_{%err_measure} = NA
+		vector(!steps) v_{%eq}_{%err_measure} = NA
 		for !col = 3 to (!steps + 2)
 			!indx = !col - 2
-			v_eq_{%err_measure}(!indx) = @val(t_acc(4,!col)) 'errors always in row 4
+			v_{%eq}_{%err_measure}(!indx) = @val(t_acc(4,!col)) 'errors always in row 4
 		next
 		
 	logmsg --- Move everything left back over to the original page
@@ -326,4 +326,5 @@ logmsg
 '1. http://faculty.smu.edu/tfomby/eco5385/lecture/Scoring%20Measures%20for%20Prediction%20Problems.pdf
 '2. http://robjhyndman.com/hyndsight/tscvexample/
 '3. http://robjhyndman.com/hyndsight/crossvalidation/
+
 

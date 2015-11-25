@@ -29,8 +29,9 @@
 		equation eq_01.ls d(indpro) c ar(1)
 		equation eq_02.ls d(indpro) c ar(1) ar(2) ma(1)
 		equation eq_03.ls indpro c @trend @trend^2		
-		
-		
+		equation eq_04.ls d(indpro) c @trend @trend^2	
+		equation eq_05.arch d(indpro) c ar(1) ar(2) ma(1)
+				
 	logmsg --- Assessing Forecast errors
 
 		%eqs = @wlookup("EQ_*", "equation")

@@ -8,7 +8,6 @@
 ' 	Returns a few objects in the wf:
 '		1. T_ACC --> a table with the eq name and error (see below) by forecast horizon
 
-
 '##########################################################################################################
 '##########################################################################################################
 '##########################################################################################################
@@ -326,4 +325,5 @@ logmsg
 '1. http://faculty.smu.edu/tfomby/eco5385/lecture/Scoring%20Measures%20for%20Prediction%20Problems.pdf
 '2. http://robjhyndman.com/hyndsight/tscvexample/
 '3. http://robjhyndman.com/hyndsight/crossvalidation/
+
 

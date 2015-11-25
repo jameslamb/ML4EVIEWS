@@ -29,9 +29,7 @@
 		equation eq_01.ls d(indpro) c ar(1)
 		equation eq_02.ls d(indpro) c ar(1) ar(2) ma(1)
 		equation eq_03.ls indpro c @trend @trend^2		
-		equation eq_04.ls d(indpro) c @trend @trend^2	
-		equation eq_05.arch d(indpro) c ar(1) ar(2) ma(1)
-				
+
 	logmsg --- Assessing Forecast errors
 
 		%eqs = @wlookup("EQ_*", "equation")
@@ -39,7 +37,7 @@
 			
 			%endhist = INDPRO.@last
 			%longest_smpl = "1920 " + %endhist
-			exec %CVAL %eq "2014M01" %longest_smpl  "MAE" "FALSE"
+			exec %CVAL %eq "2013M01" %longest_smpl  "MAPE" "FALSE"
 			
 			'build up the table of errors
 			%main_tbl = "T_FCST_ACC"
@@ -79,6 +77,7 @@
 			t_fcst_acc.settextcolor(R{!minrow}C{!col}) white
 			
 		next
+		delete v_tmp
 		
 		show t_fcst_acc
 		

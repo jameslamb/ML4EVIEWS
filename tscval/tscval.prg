@@ -7,7 +7,7 @@
 ' 	then stacks up vectors by horizon and computes errors at different horizons.
 ' 	Returns a few objects in the wf:
 '		1. T_ACC --> a table with the eq name and error (see below) by forecast horizon
-'		2. V_{%EQ}_{%ERR_MEASURE} --> a vector for the given equation, where element 1 is 1-step-ahead, elem 2 is 2-step, etc.
+'		2. V_{%eq}_{%ERR_MEASURE} --> a vector for the given equation, where element 1 is 1-step-ahead, elem 2 is 2-step, etc.
 
 '##########################################################################################################
 '##########################################################################################################
@@ -18,41 +18,92 @@ logmode logmsg
 logmsg
 
 'NOTE: Currently only supports equation objects (no VARs)
-
-	logmsg
-	logmsg --- BEGINNING ROLL_FCST ---
-	logmsg
-	
-		tic
 		
+		!debug = 0 'set to 1 if you want the logmsgs to display
+	
+		if !debug = 0 then
+			logmode +addin
+		endif
+		
+		!dogui = 1 'Get data from the GUI
+		
+		'check that an object exists
+		%type = @getthistype
+		if %type="NONE" then
+			@uiprompt("No object found, please open an Equation object")
+			stop
+		endif
+		
+		'check that {%eq} object is an equation
+		if %type<>"EQUATION" then
+			@uiprompt("Procedure can only be run from an Equation object")
+			stop
+		endif
+		
+		'Option 1 = when should the shortest sample end?
+		if @len(@option(1)) > 0 then
+			%short_end = @equaloption("SHORT_END") 'end of the shortest sample to forecast over
+			!dogui = 0 'if we get here, it must mean that this is being run programmatically
+		endif
+
+		'Option 2 = what is the longest sample to estimate? e.g. "1990 2015m10"
+		if @len(@option(2)) > 0 then
+			%longest_smpl = @equaloption("LONGEST")
+			logmsg --- longest sample %longest_smpl
+		endif
+
+		'Option 3 = What error measure do you prefer?
+		if @len(@option(3)) > 0 then
+			%err_measure = @equaloption("ERR") 
+		endif
+
+		'Option 4 = Do you want to keep the forecast series objects?
+		if @len(@option(4)) > 0 then
+			!keep_fcst = @hasoption("T")
+			!keep_fcst = @hasoption("TRUE")
+		endif
+
+		'Set up the GUI
+		%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""MAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""Correct sign (count)"" ""Correct sign (%)"" "  
+		if !dogui = 1 then
+			!keep_fcst = 0
+			%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""MAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 
+			
+			!result = @uidialog("edit", %short_end, "Enter the end date of the shortest estimation sample", "edit", _
+			%longest_smpl, "What is the longest sample to estimate?", "list", %err_measure, "Preferred error measure", %error_types, _
+			"Check", !keep_fcst, "Keep the forecast series objects") 		
+		endif
+
 		'Get params
 		
 		'---- Passed in ------'
-		%eq = {%0} 'equation object to work with
-		%short_end = {%1} 'end of the shortest sample to forecast over
-		%longest_smpl = {%2} 'What is the longest sample to estiamte? e.g. "1990 2015M10"
-		%err_measure = {%3} 'what error measure do you prefer? 
-			'Valid options:
-'				a. "MSE" = mean squared error
-'				b. "MAE" = mean absolute error
-'				c. "RMSE" = root mean squuared error
-'				d. "MSFE" = mean squared forecast error
-'				e. "MAPE" = mean absolute percent error
-'				f. "MPE" = mean percentage error
-'				g. "MSPE" = mean squared percentage error
-'				h. "RMSPE" = root mean squared percentage error
-'				i. "SIGN" = count of the number of times the forecast guess the correct direction of change
-'				j. "SIGN_PERCENT" = percent of the times that we guessed the sign of the forecast correctly
-			
-		%keep_fcst = {%4} 'Set to "TRUE" or "T" to avoid deleting the forecast series
+'		%eq = {%0} 'equation object to work with
+'		%short_end = {%1} 'end of the shortest sample to forecast over
+'		%longest_smpl = {%2} 'What is the longest sample to estiamte? e.g. "1990 2015M10"
+'		%err_measure = {%3} 'what error measure do you prefer? 
+'			'Valid options:
+''				a. "MSE" = mean squared error
+''				b. "MAE" = mean absolute error
+''				c. "RMSE" = root mean squuared error
+''				d. "MSFE" = mean squared forecast error
+''				e. "MAPE" = mean absolute percent error
+''				f. "MPE" = mean percentage error
+''				g. "MSPE" = mean squared percentage error
+''				h. "RMSPE" = root mean squared percentage error
+''				i. "SIGN" = count of the number of times the forecast guess the correct direction of change
+''				j. "SIGN_PERCENT" = percent of the times that we guessed the sign of the forecast correctly
+'			
+'		%keep_fcst = {%4} 'Set to "TRUE" or "T" to avoid deleting the forecast series
 		
 		'--- Environment ---'
 		%freq = @pagefreq 'page frequency
 		%pagesmpl = @pagesmpl
 		%pagename = @pagename
+		%wf = @wfname
+		%eq = _this.@name 'get the name of whatever we're using this on
 		%command = {%eq}.@command 'command to re-estimate (with all the same options)
 		
-		pageselect {%pagename}
+		wfselect {%wf}\{%pagename}
 		{%eq}.makeregs g1
 		%base_dep = @word(g1.@depends,1) 'dependent variable WITHOUT transformations
 		delete g1
@@ -60,16 +111,14 @@ logmsg
 		%start_est = @word(%longest_smpl,1) 'where should estimation start?
 		%end_est = @word(%longest_smpl,2) 'where should the longest estimation end?
 		!tot_eqs = @dtoo(%end_est) - @dtoo(%short_end) 'number of estiamtions we'll do
-		
-	logmsg --- Copying over necessary stuff to a new page
-	
+			
 		%newpage = "TMPAAAAA" 'give it a ridiculous name to avoid overwriting stuff
 		pagecreate(page={%newpage}) {%freq} {%pagesmpl} 'give it a crazy name to minimize risk of overwriting things
-		pageselect {%newpage}
+		wfselect {%wf}\{%newpage}
 		
 		'Create a group of regressors and copy it over
 		'NOTE: This will take only the base series. If the reg. has CPI and d(CPI), only CPI is copied
-		pageselect {%pagename}
+		wfselect {%wf}\{%pagename}
 		%rgroup = "g_blahblah"
 		{%eq}.makeregs {%rgroup}
 			{%rgroup}.drop @trend @trend^2 log(@trend)
@@ -79,7 +128,7 @@ logmsg
 		delete {%pagename}\{%rgroup}
 		
 		copy {%pagename}\{%eq} {%newpage}\{%eq}
-		pageselect {%newpage}
+		wfselect {%wf}\{%newpage}
 		
 		'---- Date format ----'
 		%freq = @pagefreq
@@ -103,6 +152,9 @@ logmsg
 		'Return this string in a workfile object
 		string date_fmt = %date_format
 		
+		logmsg --- got past date format
+		logsave %save
+		
 	logmsg --- Beginning rolling estimation and forecasting
 		
 		for !i = 0 to !tot_eqs-1
@@ -122,6 +174,8 @@ logmsg
 				{%eq}.forecast(f=na) {%base_dep}_f_{%start_fcst}
 			smpl @all
 		next
+		logmsg --- got through all the rolling and forecasting
+		logsave %save
 			
 	logmsg --- Creating Series and Vectors of Errors
 	
@@ -160,7 +214,9 @@ logmsg
 			smpl @all
 			
 		next
-		
+		logmsg --- got through creating series and vectors of errors
+		logsave %save
+
 	logmsg --- Collecting the n-step-ahead errors
 		
 		'Absolute errors
@@ -290,9 +346,10 @@ logmsg
 	
 	logmsg --- Cleaning up intermediate forecasting variables
 	
+		wfselect {%wf}\{%newpage}
 		delete e_vec_* date_fmt* err_* v_err_* *obsid* e_pc* *sgn* *_pcerr_* *tmp* changes*
 		
-		if @upper(%keep_fcst) <> "TRUE" and @upper(%keep_fcst) <> "T" then
+		if !keep_fcst <> 1 then
 			delete {%base_dep}_f_*
 		endif
 		
@@ -305,17 +362,16 @@ logmsg
 			!indx = !col - 2
 			v_{%eq}_{%err_measure}(!indx) = @val(t_acc(4,!col)) 'errors always in row 4
 		next
-		
+	
 	logmsg --- Move everything left back over to the original page
 	
-		copy {%newpage}\* {%pagename}\*
+		copy {%newpage}\t_acc {%pagename}\t_acc
+		copy {%newpage}\v_* {%pagename}\v_*
 		pagedelete {%newpage}
-		pageselect {%pagename}
-		
-		%elapsed = @str(@toc)
+		wfselect {%wf}\{%pagename}
 		
 	logmsg
-	logmsg ------ ROLL_FCST COMPLETE {%elapsed} ------
+	logmsg ------ TSCVAL COMPLETE ------
 	logmsg
 		
 '##########################################################################################################

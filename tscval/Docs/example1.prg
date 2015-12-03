@@ -15,7 +15,7 @@
 		tic ' start timer
 		
 	'==== Global Variables ===
-	%CVAL = @replace(@runpath, "DOCS\","") + "\cval.prg"
+	%CVAL = @replace(@runpath, "DOCS\","") + "tscval.prg"
 		
 	logmsg --- Setting up wf full of equations
 		
@@ -38,7 +38,7 @@
 			%endhist = INDPRO.@last
 			%longest_smpl = "1920 " + %endhist
 			'exec %CVAL %eq "2013M01" %longest_smpl  "MAPE" "FALSE"
-			{%eq}.tscval(SHORT_END = "2013M01", LONGEST = %longest_smpl, ERR = "MAPE", K=F)
+			{%eq}.tscval(TRAIN = %longest_smpl, H=0.20, ERR="MAE", K=T)
 			
 			'build up the table of errors
 			%main_tbl = "T_FCST_ACC"

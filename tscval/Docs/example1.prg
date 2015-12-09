@@ -23,22 +23,26 @@
 		wfcreate(wf=CV_EXAMPLE, page = DATA_M) m 1920 2020
 		
 		'Fetch data
-		fetch(d=FRED) INDPRO
+		fetch(d=FRED) INDPRO CPIAUCSL
 		
 		'Estimate a few differerent models
 		equation eq_01.ls d(indpro) c ar(1)
 		equation eq_02.ls d(indpro) c ar(1) ar(2) ma(1)
-		equation eq_03.ls indpro c @trend @trend^2		
+		equation eq_03.ls indpro c @trend @trend^2
+		
+		'and a var	
+		var var_1.ls 1 2 d(cpiaucsl) d(indpro)	
 
 	logmsg --- Assessing Forecast errors
 
-		%eqs = @wlookup("EQ_*", "equation")
+		%eqs = @wlookup("EQ_*", "equation") + " " + @wlookup("VAR_*", "var")
 		for %eq {%eqs}
 			
 			%endhist = INDPRO.@last
 			%longest_smpl = "1920 " + %endhist
+			%dep = "INDPRO"
 			'exec %CVAL %eq "2013M01" %longest_smpl  "MAPE" "FALSE"
-			{%eq}.tscval(TRAIN = %longest_smpl, H=0.20, ERR="MAE", K=T)
+			{%eq}.tscval(TRAIN = %longest_smpl, H=0.10, ERR="MAE", K=F, DEP=%dep)
 			
 			'build up the table of errors
 			%main_tbl = "T_FCST_ACC"
@@ -62,7 +66,7 @@
 				delete t_acc	
 			endif
 		next
-		
+
 		'Go through each column of the table, color in the cell w/ the lowest error
 		for !col = 3 to @columns(t_fcst_acc)
 			!best_err = 0
@@ -90,4 +94,5 @@
 '##########################################################################################################
 '##########################################################################################################
 '##########################################################################################################
+
 

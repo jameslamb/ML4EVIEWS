@@ -19,7 +19,7 @@ logmsg
 
 'NOTE: Currently only supports equation objects (no VARs)
 		
-		!debug = 1 'set to 1 if you want the logmsgs to display
+		!debug = 0 'set to 1 if you want the logmsgs to display
 	
 		if !debug = 0 then
 			logmode +addin
@@ -30,13 +30,13 @@ logmsg
 		'check that an object exists
 		%type = @getthistype
 		if %type="NONE" then
-			@uiprompt("No object found, please open an Equation object")
+			@uiprompt("No object found, please open an Equation or VAR object")
 			stop
 		endif
 		
-		'check that {%eq} object is an equation
-		if %type<>"EQUATION" then
-			@uiprompt("Procedure can only be run from an Equation object")
+		'check that {%eq} object is an equation or VAR
+		if %type<>"EQUATION" and %type<>"VAR" then
+			@uiprompt("Procedure can only be run from an Equation or VAR object")
 			stop
 		endif
 		
@@ -58,9 +58,10 @@ logmsg
 		endif
 
 		'Option 4 = Do you want to keep the forecast series objects?
+		!keep_fcst = 0
 		if @len(@option(4)) > 0 then
-			!keep_fcst = @hasoption("T")
-			!keep_fcst = @hasoption("TRUE")
+			%keep = @equaloption("K")
+			!keep_fcst = (@upper(%keep)="TRUE") or (@upper(@left(%keep,1))="T")
 		endif
 		
 		'--- Environment Info ---'
@@ -73,19 +74,54 @@ logmsg
 		
 		'Grab a bit of information from the equation
 		wfselect {%wf}\{%pagename}
-		{%eq}.makeregs g1
-		%base_dep = @word(g1.@depends,1) 'dependent variable WITHOUT transformations
 		
-		stomna(g1,m1)
-		%first =  @otod(@min(@cifirst(m1)))
-		%last = @otod(@min(@cilast(m1))) 'get the end of the longest estimable sample
-		%training_range = %first + " " + %last
-		delete g1
-
+		if %type = "EQUATION" then
+			{%eq}.makeregs g1
+			%base_dep = @word(g1.@depends,1) 'dependent variable WITHOUT transformations
+			
+			stomna(g1,m1)
+			%first =  @otod(@min(@cifirst(m1)))
+			%last = @otod(@min(@cilast(m1))) 'get the end of the longest estimable sample
+			%training_range = %first + " " + %last
+			delete g1 m1
+		else
+			if %type = "VAR" then
+	
+				'Turn the VAR into a model
+				_this.makemodel(_m_temp)
+				
+				'Get the variable list
+				%vars = _m_temp.@varlist
+				group g1 {%vars}
+				
+				'Take in the argument "DEP", only passed for VAR objects, which tells which of the variables we care about validating
+				if !dogui = 0 then
+					%base_dep = @equaloption("DEP")
+				else
+					%base_dep = @word(%vars,1)
+				endif
+				
+				'Is this valid?
+				if @wfind(%vars, %base_dep) = 0 then
+					%exception = %base_dep + " is not a valid variable in " + %eq + "."
+					@uiprompt(%exception)
+					stop
+				endif
+				
+				smpl @all
+				stomna(g1,m1)
+				%first =  @otod(@min(@cifirst(m1)))
+				%last = @otod(@min(@cilast(m1))) 'get the end of the longest estimable sample
+				%training_range = %first + " " + %last
+				delete g1 _m_temp
+				
+			endif
+		endif
+		
 		'Set up the GUI
 		if !dogui = 1 then
 			!keep_fcst = 0
-			%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 
+			%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 
 			
 			'Initialize with reasonable values
 			%holdout = "0.10" 'default to testing over 10% of the training range
@@ -111,13 +147,15 @@ logmsg
 ''				b. "MAE" = mean absolute error
 ''				c. "RMSE" = root mean squuared error
 ''				d. "MSFE" = mean squared forecast error
-''				e. "MAPE" = mean absolute percent error
-''				f. "MPE" = mean percentage error
-''				g. "MSPE" = mean squared percentage error
-''				h. "RMSPE" = root mean squared percentage error
-''				i. "SIGN" = count of the number of times the forecast guess the correct direction of change
-''				j. "SIGN_PERCENT" = percent of the times that we guessed the sign of the forecast correctly
-'				k. "SMAPE" = symmetric MAPE (see http://robjhyndman.com/hyndsight/smape/
+''				e. "medAE" = median absolute error
+''				f. "MAPE" = mean absolute percent error
+''				g. "MPE" = mean percentage error
+''				h. "MSPE" = mean squared percentage error
+''				u. "RMSPE" = root mean squared percentage error
+'				j. "medPE" = median percentage error
+''				k. "SIGN" = count of the number of times the forecast guess the correct direction of change
+''				l. "SIGN_PERCENT" = percent of the times that we guessed the sign of the forecast correctly
+'				m. "SMAPE" = symmetric MAPE (see http://robjhyndman.com/hyndsight/smape/
 '			
 '		%keep_fcst = {%4} 'Set to "TRUE" or "T" to avoid deleting the forecast series
 		
@@ -132,12 +170,28 @@ logmsg
 		pagecreate(page={%newpage}) {%freq} {%pagesmpl} 'give it a crazy name to minimize risk of overwriting things
 		wfselect {%wf}\{%newpage}
 		
+		
 		'Create a group of regressors and copy it over
 		'NOTE: This will take only the base series. If the reg. has CPI and d(CPI), only CPI is copied
 		wfselect {%wf}\{%pagename}
 		%rgroup = "g_blahblah"
-		{%eq}.makeregs {%rgroup}
-			{%rgroup}.drop @trend @trend^2 log(@trend)
+		
+		if %type = "EQUATION" then
+			{%eq}.makeregs {%rgroup}
+		else
+			if %type = "VAR" then
+				'Turn the VAR into a model
+				_this.makemodel(_m_temp)
+				
+				'Get the variable list
+				%vars = _m_temp.@varlist
+				group {%rgroup} {%vars}	
+				
+				delete _m_temp
+			endif
+		endif
+		
+		{%rgroup}.drop @trend @trend^2 log(@trend)
 		copy(g=d) {%pagename}\{%rgroup} {%newpage}\{%rgroup} '(g=d) --> series only (not the group object
 		
 		'delete that group
@@ -180,13 +234,26 @@ logmsg
 			logmsg --- Estimating {%eq} over sample %est_smpl
 			
 			smpl {%est_smpl}
-				{%eq}.{%command} 're-estimates the equation
+				{%eq}.{%command} 're-estimates the equation or VAR
 				
 			'Forecast over all the remaining periods
 			%start_fcst = @datestr(@dateadd(@dateval(%end_est), +1, %freq), date_fmt)
 			
 			smpl {%start_fcst} @last
-				{%eq}.forecast(f=na) {%base_dep}_f_{%start_fcst}
+				if %type = "EQUATION" then
+					{%eq}.forecast(f=na) {%base_dep}_f_{%start_fcst}
+				else
+					if %type = "VAR" then
+						
+						{%eq}.forecast(f=na) _f 'just pass a suffix, not a full name (can only be 3 characters)
+						rename {%base_dep}_f {%base_dep}_f_{%start_fcst} 'get back to the form we want
+						
+						'The (f=na) command for VARs has been buggy...manually do its work for now
+						smpl @first {%end_est}
+							{%base_dep}_f_{%start_fcst} = NA
+						smpl @all
+					endif
+				endif
 			smpl @all
 		next
 		logmsg --- got through all the rolling and forecasting
@@ -372,6 +439,7 @@ logmsg
 			!MSE = @mean(@epow({%vec},2))
 			!MSFE = !MSE  'some people use different terms
 			!RMSE = @sqrt(!MSE)
+			!medAE = @median(@abs({%vec}))
 			
 			'Percentage errors
 			!MAPE = @mean(@abs({%pc_vec}))
@@ -379,6 +447,7 @@ logmsg
 			!MSPE = @mean(@epow({%pc_vec},2))
 			!RMSPE = @sqrt(!MSPE)
 			!SMAPE = @mean({%sym_vec})
+			!medPE = @med(@abs({%pc_vec}))
 			
 			'Sign Errors
 			!SIGN = @sum({%sign_vec})
@@ -391,18 +460,10 @@ logmsg
 		t_acc.setlines(R2C1:R2C{!cols}) +b 'underline the header row
 		
 		show t_acc
-	
-	logmsg --- Cleaning up intermediate forecasting variables
-	
-		wfselect {%wf}\{%newpage}
-		delete e_vec_* date_fmt* err_* v_err_* *obsid* e_pc* *sgn* *_pcerr_* *tmp* changes* *sym*
-		
-		if !keep_fcst <> 1 then
-			delete {%base_dep}_f_*
-		endif
 		
 	logmsg --- Creating a single vector of errors
 	
+		wfselect {%wf}\{%newpage}
 		'Element 1 will be 1-step-ahead MSE, element 2 will be 2-step-ahead-MSE, etc.
 		!steps = @columns(t_acc) - 2
 		vector(!steps) v_{%eq}_{%err_measure} = NA
@@ -414,7 +475,10 @@ logmsg
 	logmsg --- Move everything left back over to the original page
 	
 		copy {%newpage}\t_acc {%pagename}\t_acc
-		copy {%newpage}\v_* {%pagename}\v_*
+		copy {%newpage}\v_{%eq}_{%err_measure}* {%pagename}\v_{%eq}_{%err_measure}*
+		if !keep_fcst = 1 then
+			copy {%newpage}\{%base_dep}_f_* {%pagename}\{%base_dep}_f_*
+		endif
 		pagedelete {%newpage}
 		wfselect {%wf}\{%pagename}
 		

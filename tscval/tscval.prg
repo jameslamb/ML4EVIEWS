@@ -96,6 +96,14 @@ logmsg
 			!result = @uidialog("edit", %training_range, "Training range", "edit", %holdout, "Maximum % of the training range to hold out", _
 			"list", %err_measure, "Preferred error measure", %error_types, "Check", !keep_fcst, "Keep the forecast series objects?" )
 			
+			'Map human-readable values to params
+			if %err_measure = "Correct sign (count)" then
+				%err_measure = "SIGN"
+			endif
+			if %err_measure = "Correct sign (%)" then
+				%err_measure = "SIGNP"
+			endif
+			
 			!holdout = @val(%holdout)
 
 		endif
@@ -115,8 +123,8 @@ logmsg
 ''				f. "MPE" = mean percentage error
 ''				g. "MSPE" = mean squared percentage error
 ''				h. "RMSPE" = root mean squared percentage error
-''				i. "SIGN" = count of the number of times the forecast guess the correct direction of change
-''				j. "SIGN_PERCENT" = percent of the times that we guessed the sign of the forecast correctly
+''				i. "SIGN" = sign...count of the number of times the forecast guess the correct direction of change
+''				j. "SIGNP" = percent of the times that we guessed the sign of the forecast correctly
 '				k. "SMAPE" = symmetric MAPE (see http://robjhyndman.com/hyndsight/smape/
 '			
 '		%keep_fcst = {%4} 'Set to "TRUE" or "T" to avoid deleting the forecast series
@@ -382,7 +390,7 @@ logmsg
 			
 			'Sign Errors
 			!SIGN = @sum({%sign_vec})
-			!SIGN_PERCENT = 100*(!SIGN/@obs({%sign_vec}))
+			!SIGNP = 100*(!SIGN/@obs({%sign_vec}))
 			
 			t_acc(4,!col) =!{%err_measure}
 		next

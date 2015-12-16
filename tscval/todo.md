@@ -1,4 +1,5 @@
 |Dated Added  | Item to Resolve                                                                     |
 |-------------|:-----------------------------------------------------------------------------------:|
-|Nov 19, 2015 | Turn this into a formal Add-in (not just a collection of programs)                  |
-|Nov 19, 2015 | ADDED FEATURE:  forecasting from VAR objects                                        |
+|Dec 11, 2015 | Submit this as an EViews add-in                                                     |
+|Dec 11, 2015 | MAKE A PACKAGE: add mpdm cval, cv_choose, cv_many programs to the installer?        |
+

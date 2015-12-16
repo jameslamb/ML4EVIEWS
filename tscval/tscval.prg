@@ -3,7 +3,7 @@
 'Motivation: Perform rolling time-series corss validation.
 
 'Description: 
-' 	Program which takes an equation, rolls teh sample, keeps producing forecasts,
+' 	Program which takes an equation, rolls the sample, keeps producing forecasts,
 ' 	then stacks up vectors by horizon and computes errors at different horizons.
 ' 	Returns a few objects in the wf:
 '		1. T_ACC --> a table with the eq name and error (see below) by forecast horizon
@@ -19,7 +19,7 @@ logmsg
 
 'NOTE: Currently only supports equation objects (no VARs)
 		
-		!debug = 0 'set to 1 if you want the logmsgs to display
+		!debug = 1 'set to 1 if you want the logmsgs to display
 	
 		if !debug = 0 then
 			logmode +addin
@@ -72,52 +72,6 @@ logmsg
 		%eq = _this.@name 'get the name of whatever we're using this on
 		%command = {%eq}.@command 'command to re-estimate (with all the same options)
 		
-		'Grab a bit of information from the equation
-		wfselect {%wf}\{%pagename}
-		
-		if %type = "EQUATION" then
-			{%eq}.makeregs g1
-			%base_dep = @word(g1.@depends,1) 'dependent variable WITHOUT transformations
-			
-			stomna(g1,m1)
-			%first =  @otod(@min(@cifirst(m1)))
-			%last = @otod(@min(@cilast(m1))) 'get the end of the longest estimable sample
-			%training_range = %first + " " + %last
-			delete g1 m1
-		else
-			if %type = "VAR" then
-	
-				'Turn the VAR into a model
-				_this.makemodel(_m_temp)
-				
-				'Get the variable list
-				%vars = _m_temp.@varlist
-				group g1 {%vars}
-				
-				'Take in the argument "DEP", only passed for VAR objects, which tells which of the variables we care about validating
-				if !dogui = 0 then
-					%base_dep = @equaloption("DEP")
-				else
-					%base_dep = @word(%vars,1)
-				endif
-				
-				'Is this valid?
-				if @wfind(%vars, %base_dep) = 0 then
-					%exception = %base_dep + " is not a valid variable in " + %eq + "."
-					@uiprompt(%exception)
-					stop
-				endif
-				
-				smpl @all
-				stomna(g1,m1)
-				%first =  @otod(@min(@cifirst(m1)))
-				%last = @otod(@min(@cilast(m1))) 'get the end of the longest estimable sample
-				%training_range = %first + " " + %last
-				delete g1 _m_temp
-				
-			endif
-		endif
-		
 		'Set up the GUI
 		if !dogui = 1 then
 			!keep_fcst = 0
@@ -143,6 +97,73 @@ logmsg
 			!holdout = @val(%holdout)
 
 		endif
+		
+		'Grab a bit of information from the equation
+		wfselect {%wf}\{%pagename}
+		
+		if %type = "EQUATION" then
+			smpl @all
+				{%eq}.makeregs g1
+				%base_dep = @word(g1.@depends,1) 'dependent variable WITHOUT transformations
+				
+				stomna(g1,m1)
+				
+				'Need to potentially adjust the training_range to accoutn for NAs in the passed-in training range
+				%earliest_possible = @otod(@max(@cifirst(m1)))
+				%latest_possible = @otod(@min(@cilast(m1)))
+				'If the earliest possible obs is earlier than the start of training range, adjust the training range up
+				if @dtoo(%earliest_possible) > @dtoo(@word(%training_range,1)) then
+					%training_range = @replace(%training_range, @word(%training_range,1), %earliest_possible)
+				endif
+				'If the latest possible obs is earlier than the end of training range, adjust the training range down
+				if @dtoo(%latest_possible) <  @dtoo(@word(%training_range,2)) then
+					%training_range = @replace(%training_range, @word(%training_range,2), %latest_possible)
+				endif
+				delete g1 m1
+			smpl @all
+		else
+			if %type = "VAR" then
+	
+				'Turn the VAR into a model
+				_this.makemodel(_m_temp)
+				
+				'Get the variable list
+				%vars = _m_temp.@varlist
+				group g1 {%vars}
+				
+				'Take in the argument "DEP", only passed for VAR objects, which tells which of the variables we care about validating
+				if !dogui = 0 then
+					%base_dep = @equaloption("DEP")
+				else
+					%base_dep = @word(%vars,1)
+				endif
+				
+				'Is this valid?
+				if @wfind(%vars, %base_dep) = 0 then
+					%exception = %base_dep + " is not a valid variable in " + %eq + "."
+					@uiprompt(%exception)
+					stop
+				endif
+				
+				smpl @all
+					stomna(g1,m1)
+					'Need to potentially adjust the training_range to accoutn for NAs in the passed-in training range
+					%earliest_possible = @otod(@max(@cifirst(m1)))
+					%latest_possible = @otod(@min(@cilast(m1)))
+					%training_range = %first + " " + %last
+					'If the earliest possible obs is earlier than the start of training range, adjust the training range up
+					if @dtoo(%earliest_possible) > @dtoo(@word(%training_range,1)) then
+						%training_range = @replace(%training_range, @word(%training_range,1), %earliest_possible)
+					endif
+					'If the latest possible obs is earlier than the end of training range, adjust the training range down
+					if @dtoo(%latest_possible) <  @dtoo(@word(%training_range,2)) then
+						%training_range = @replace(%training_range, @word(%training_range,2), %latest_possible)
+					endif
+					delete g1 m1 _m_temp
+				smpl @all
+				
+			endif
+		endif
 
 		'Get params
 		'---- Passed in ------'
@@ -166,18 +187,10 @@ logmsg
 '				m. "SMAPE" = symmetric MAPE (see http://robjhyndman.com/hyndsight/smape/
 '			
 '		%keep_fcst = {%4} 'Set to "TRUE" or "T" to avoid deleting the forecast series
-		
-		!init_obs = @round( (1-!holdout) * (@dtoo(@word(%training_range,2)) - @dtoo(@word(%training_range,1))) ) + @dtoo(%first) 		
-		%short_end = @otod(!init_obs)
-			
-		%start_est = @word(%training_range,1) 'where should estimation start?
-		%end_est = @word(%training_range,2) 'where should the longest estimation end?
-		!tot_eqs = @dtoo(%end_est) - @dtoo(%short_end) 'number of estimations we'll do
 			
 		%newpage = "TMPAAAAA" 'give it a ridiculous name to avoid overwriting stuff
 		pagecreate(page={%newpage}) {%freq} {%pagesmpl} 'give it a crazy name to minimize risk of overwriting things
 		wfselect {%wf}\{%newpage}
-		
 		
 		'Create a group of regressors and copy it over
 		'NOTE: This will take only the base series. If the reg. has CPI and d(CPI), only CPI is copied
@@ -233,6 +246,13 @@ logmsg
 		logmsg --- got past date format
 		
 	logmsg --- Beginning rolling estimation and forecasting
+			
+		!init_obs = @round( (1-!holdout) * (@dtoo(@word(%training_range,2)) - @dtoo(@word(%training_range,1))) ) + @dtoo(%earliest_possible) 		
+		%short_end = @otod(!init_obs)
+			
+		%start_est = @word(%training_range,1) 'where should estimation start?
+		%end_est = @word(%training_range,2) 'where should the longest estimation end?
+		!tot_eqs = @dtoo(%end_est) - @dtoo(%short_end) 'number of estimations we'll do
 		
 		for !i = 0 to !tot_eqs-1
 			
@@ -265,7 +285,7 @@ logmsg
 			smpl @all
 		next
 		logmsg --- got through all the rolling and forecasting
-			
+		
 	logmsg --- Creating Series and Vectors of Errors
 	
 		%lookup = %base_dep + "_F_*"
@@ -288,15 +308,20 @@ logmsg
 				series {%pc_error_ser} = 100*({%base_dep} - {%series})/({%base_dep}) 'report in percentage point units (thus the *100)
 				vector {%pc_error_vec} = @convert({%pc_error_ser})
 				
-				'Sign errors
+				'Sign errors (should be over the horizon. So 2 step ahead asks: "Did we correctly predict the direction of change between two pers ago and today?")
 				%sign_error_ser = @replace(%series, %prefx, "ERR_SGN_") 'sign error
 				%sign_error_vec = @replace(%series, %prefx, "V_SGNERR_") 'sign error
-					'Get a series of changes for the denominator
-					series changes = d({%base_dep})
+					
+					'Find the last observation of history (before we started this particular forecast
+					%end_hist = @otod(@dtoo({%series}.@first) - 1) 'The period before the forecast starts is where estimation ended
+					!hist_point = @elem({%base_dep},%end_hist) 'grab that value from the end of the history
+					
+					'Get a series of actual changes in the history
+					series changes = {%base_dep} - @elem({%base_dep}, %end_hist)
 					changes = @recode(changes=0, 1e-03, changes) 'recode 0s to small positive (want to treat  0 as positive)
 					
 					'If change in fcst and change in actual are in the same direction, the sign was correct
-					series {%sign_error_ser} = (({%series}- {%base_dep}(-1)) / changes) > 0 '1 if correct sign, 0 otherwise
+					series {%sign_error_ser} = (({%series} -  @elem({%base_dep}, %end_hist)) / changes) > 0 '1 if correct sign, 0 otherwise
 					vector {%sign_error_vec} = @convert({%sign_error_ser})
 					
 				'Sums for sMAPE (see http://robjhyndman.com/hyndsight/smape/)

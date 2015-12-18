@@ -150,7 +150,7 @@ logmsg
 					'Need to potentially adjust the training_range to accoutn for NAs in the passed-in training range
 					%earliest_possible = @otod(@max(@cifirst(m1)))
 					%latest_possible = @otod(@min(@cilast(m1)))
-					%training_range = %first + " " + %last
+					%training_range = %earliest_possible + " " + %latest_possible
 					'If the earliest possible obs is earlier than the start of training range, adjust the training range up
 					if @dtoo(%earliest_possible) > @dtoo(@word(%training_range,1)) then
 						%training_range = @replace(%training_range, @word(%training_range,1), %earliest_possible)

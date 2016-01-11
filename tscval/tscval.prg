@@ -339,5 +339,3 @@ endif
 
 'Program Complete
 logmsg Program is Complete
-
-

@@ -10,18 +10,12 @@
 		
 		'Fetch data
 		'fetch(d=FRED) gdpr cpi
-		'fetch(d="USMACRO_MODCON") gdpr.q cpi.q
-		fetch(d=FRED) INDPRO CPIAUCSL
+		fetch(d="USMACRO_MODCON") gdpr.q cpi.q
 		
 		'Estimate a few differerent models
-		'equation eq_01.ls d(gdpr) c ar(1) @trend
-		'equation eq_02.ls d(gdpr) c ar(1) ar(2) ma(1)
-		'equation eq_03.ls gdpr c @trend @trend^2
-		
-		
-		equation eq_01.ls d(indpro) c ar(1)
-		equation eq_02.ls d(indpro) c ar(1) ar(2) ma(1)
-		equation eq_03.ls indpro c @trend @trend^2
+		equation eq_01.ls d(gdpr) c ar(1) @trend
+		equation eq_02.ls d(gdpr) c ar(1) ar(2) ma(1)
+		equation eq_03.ls gdpr c @trend @trend^2
 
 		%eqs = @wlookup("EQ_*", "equation") + " " + @wlookup("VAR_*", "var")
 		

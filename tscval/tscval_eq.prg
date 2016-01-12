@@ -1,5 +1,3 @@
-'Author: James Lamb, Abbott Economics
-
 'Motivation: Perform rolling time-series corss validation.
 
 'Description: 
@@ -28,13 +26,13 @@ endif
 'check that an object exists
 %type = @getthistype
 if %type="NONE" then
-	@uiprompt("No object found, please open an Equation or VAR object")
+	@uiprompt("No object found, please open an Equation object")
 	stop
 endif
 		
-'check that {%eq} object is an equation or VAR
+'check that the object is an equation
 if %type<>"EQUATION" then
-	@uiprompt("Procedure can only be run from an Equation or VAR object")
+	@uiprompt("Procedure can only be run from an Equation object")
 	stop
 endif
 
@@ -48,7 +46,6 @@ if not @hasoption("PROC") then
 	!dogui=1
 endif
 
-
 '--- Environment Info ---'
 logmsg Getting Environment Info
 %freq = @pagefreq 'page frequency
@@ -56,11 +53,10 @@ logmsg Getting Environment Info
 %pagename = @pagename
 %pagerange = @pagerange
 %wf = @wfname
-%eq = _this.@name 'get the name of whatever we're using this on
+%eq = _this.@name 'get the name of whatever object we're using this on
 %command = {%eq}.@command 'command to re-estimate (with all the same options) 
 
-
-''If the add-in is invoked through GUI
+'If the add-in is invoked through GUI, !result below will be changed to something else
 !result=0
 'Set up the GUI
 if !dogui = 1 then
@@ -84,7 +80,6 @@ if !dogui = 1 then
 	!holdout = @val(%holdout)	
 endif
 
-
 'choose dialog outcomes
 if !result = -1 then 'will stop the program unless OK is selected in GUI
 	logmsg CANCELLED
@@ -95,7 +90,7 @@ if !dogui =0 then 'extract options passed through the program or use defaults if
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
 	%err_measure = @equaloption("ERR") 
-	!keep = @val(@equaloption("K"))
+	!keep = (@upper(@equaloption("K")) = "TRUE") or (@upper(@equaloption("K")) = "T")
 endif
 
 'Create new page for subsequent work
@@ -139,6 +134,7 @@ delete {%regmat} {%reggroup}
 
 %reggroup = @getnextname("g_")
 group {%reggroup} {%regvars}
+
 'copy all base series that are needed to the new page
 copy(g=d) {%pagename}\{%reggroup} {%newpage}\
 copy {%pagename}\{%eq} {%newpage}\
@@ -146,26 +142,6 @@ delete %reggroup
 
 'move to the new page
 wfselect {%wf}\{%newpage}
-
-'---- Date format ----'
-%freq = @pagefreq
-	
-if %freq = "A" then 
-	%date_format = "YYYY"
-else
-	if %freq = "Q" then
-		%date_format = "YYYY[Q]Q"
-	else
-		if %freq = "M" then
-			%date_format = "YYYY[M]MM"
-		else
-			if @wfind("W D5 D7 D", %freq) <> 0 then
-				%date_format = "MM/DD/YYYY"
-			endif
-		endif
-	endif
-endif   
-'-----------------------'
 
 'STEP 1: Cut Sample into Training and Testing Ranges
 'count # of obs in the training set
@@ -339,3 +315,5 @@ endif
 
 'Program Complete
 logmsg Program is Complete
+
+

@@ -1,14 +1,13 @@
-logmode logmsg
-logmsg
-mode quiet
+	
 
-	logmsg Add-In Invoked Through a Program
+	'This runs first when tscval() is run progammatically. It supplies defaults for unspecified arguments.
 
+	'Option 1 = The full range we train models over
 	if @equaloption("SAMPLE")<>"" then 
 		%fullsample  = @equaloption("SAMPLE") 'returns actual option value to the right of the equation
 	else 
 		%fullsample  =  @pagerange 
-   endif 
+   	endif 
 		
 	'Option 2 =  what % of the sample should we use to test? 
 	if @equaloption("H")<>"" then 
@@ -31,10 +30,17 @@ mode quiet
 	if @equaloption("K")<>"" then 
 		%keep = @equaloption("K") 
 		!keep_fcst = (@upper(%keep)="TRUE") or (@upper(@left(%keep,1))="T") 
-		else 
-		!keep_fcst = 0	
 	endif
+	%keep_fcst = @str(!keep_fcst)
 	
-exec ".\tscval.prg"(sample = {%fullsample}, H = {%holdout}, ERR = {%err_measure}, K = @str(!keep_fcst), PROC)
+	'Call different programs based on type of object
+	%type = @getthistype
+	if %type = "EQUATION" then
+		exec ".\tscval_eq.prg"(sample = {%fullsample}, H = {%holdout}, ERR = {%err_measure}, K = {%keep_fcst}, PROC)
+	else
+		if %type = "VAR" then
+			exec ".\tscval_var.prg"(sample = {%fullsample}, H = {%holdout}, ERR = {%err_measure}, K = {%keep_fcst}, PROC)
+		endif
+	endif
 
 

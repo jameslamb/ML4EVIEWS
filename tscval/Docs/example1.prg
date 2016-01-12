@@ -1,4 +1,4 @@
-'Motivation: Estimate a few models of US industrial production.
+'Motivation: Estimate & cross-validate a few models of US industrial production.
 
 '##########################################################################################################
 
@@ -13,11 +13,11 @@
 	equation eq_01.ls d(indpro) c ar(1)
 	equation eq_02.ls d(indpro) c ar(1) ar(2) ma(1)
 	equation eq_03.ls indpro c @trend @trend^2
-	
+
 	'Cross validate each
-	%eqs = @wlookup("EQ_*", "equation") + " " + @wlookup("VAR_*", "var")
+	%eqs = @wlookup("EQ_*", "equation")
 	for %eq {%eqs}
-		{%eq}.tscval'(K=T)
+		{%eq}.tscval(ERR="SMAPE")
 		rename t_result_01 t_{%eq}_acc
 	next
 		

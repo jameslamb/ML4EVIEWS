@@ -1,4 +1,4 @@
-'Motivation: Perform rolling time-series corss validation.
+'Motivation: Perform rolling time-series cross validation.
 
 'Description: 
 ' 	Program which takes an equation, rolls the sample, keeps producing forecasts,
@@ -13,7 +13,6 @@
 setmaxerrs 1
 mode quiet
 logmode logmsg
-logmsg
 
 'NOTE: Currently only supports equation objects (no VARs)
 		
@@ -21,6 +20,8 @@ logmsg
 
 if !debug = 0 then
 	logmode +addin
+else
+	logmsg 'pop up the log
 endif
 		
 'check that an object exists
@@ -42,7 +43,7 @@ endif
 logmsg Looking for Program Options
 if not @hasoption("PROC") then
 	'this is run through GUI
-	logmsg This is rung through GUI
+	logmsg This is run through GUI
 	!dogui=1
 endif
 
@@ -60,16 +61,16 @@ logmsg Getting Environment Info
 !result=0
 'Set up the GUI
 if !dogui = 1 then
-	!keep = 0
+	!keep_fcst = 0
 	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
 	'Initialize with reasonable values
 	%holdout = "0.10" 'default to testing over 10% of the training range
 	%fullsample = %pagerange '%training_range
 	%err_measure = "MAE"
-	!keep = 0
+	!keep_fcst = 0
 			
 	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
-		"list", %err_measure, "Preferred error measure", %error_types, "Check", !keep, "Keep the forecast series objects?" )	
+		"list", %err_measure, "Preferred error measure", %error_types, "Check", !keep_fcst, "Keep the forecast series objects?" )	
 	'Map human-readable values to params
 	if %err_measure = "Correct sign (count)" then
 		%err_measure = "SIGN"
@@ -90,7 +91,7 @@ if !dogui =0 then 'extract options passed through the program or use defaults if
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
 	%err_measure = @equaloption("ERR") 
-	!keep = (@upper(@equaloption("K")) = "TRUE") or (@upper(@equaloption("K")) = "T")
+	!keep_fcst = @val(@equaloption("K"))
 endif
 
 'Create new page for subsequent work
@@ -117,6 +118,7 @@ wfselect {%wf}\{%pagename}
 smpl @all
 stomna({%reggroup}, {%regmat}) 'the matrix will help find earliers and latest data to figure out appropriate data sample
 
+'Figure out the bounds of the data that can be estimated over
 %earliest = @otod(@max(@cifirst({%regmat})))
 %latest = @otod(@min(@cilast({%regmat})))
 
@@ -128,8 +130,9 @@ endif
 if @dtoo(%latest) < @dtoo(@word(%fullsample,2)) then
 	%fullsample = @replace(%fullsample, @word(%fullsample,2), %latest)
 endif
-		
-smpl %pagesmpl 'reset the sample back to what it was
+
+'reset the sample back to what it was	
+smpl %pagesmpl
 delete {%regmat} {%reggroup}
 
 %reggroup = @getnextname("g_")
@@ -155,28 +158,36 @@ logmsg STEP 1: Checking/Modifying Samples - Cut Sample into Training and Testing
 'STEP 2: Running Estimates
 logmsg STEP 2: Running Estimates
 
-'%forecasts = ""
-'Vector Name Lists that Need to Be Populated
 
-%v_err = ""
-%v_err_pc = ""
+'Name Lists that Need to Be Populated
 
-%vectornamelists = "v_err v_err_pc" 'list of vector namelists
+%forecasts = "" 'list of forecasts
+
+%v_err = "" 'traditional level errors (yhat-y)
+%v_err_pc = "" 'percentage errors
+%v_err_sgn = "" 'sign errors (direction of change
+%v_err_sym = "" 'scaled symmetric errors for sMAPE
+
+%vectornamelists = "v_err v_err_pc v_err_sgn v_err_sym" 'list of vector namelists
 
 %forecastseries = ""
 for !i = 0 to !toteqs-1
+	
 	'Date Strings
 	%trainend = @otod(@dtoo(%shorttrainend)+!i) 'end of the training sample (incremented by 1 in each loop step)
 	%trainstart = @word(%fullsample,1) 'beginning of the training sample
 	%fcststart = @otod(@dtoo(%trainend)+1) 'forecasting begins after training sample ends
 	%fcstend = @word(%fullsample,2) 'end of the forecast
+	
 	'Estimate the model over this sample
 	smpl %trainstart %trainend
 	{%eq}.{%command} 're-estimate the equation
+	
 	'Forecast the model over this sample
 	smpl %fcststart %fcstend
 	{%eq}.forecast(f=actual) {%depvar}_f_{%fcststart} 'create forecasts
 	%forecastseries  = %forecastseries + %depvar+"_f_"+%fcststart+" " 'list of all forecasted series
+	
 	'*****Calculate Errors
 		'ERROR 1: Absolute Errors
 		smpl @all
@@ -199,10 +210,34 @@ for !i = 0 to !toteqs-1
 		%v_err_pc = %v_err_pc + "V_ERR_PC_"+%fcststart+" " 'populate vector namelist
 		
 		'ERROR 3: Sign Erors (should be over the horizon. So 2 step ahead asks: "Did we correctly predict the direction of change between two periods ago and today?")
+		smpl @all
+		!last_hist_point = @elem({%depvar}, %trainend) 'grab the last value from history
 		
-		'LEAVE FOR LATER
+		'get a series of actual changesi n the history
+		series changes = {%depvar} - @elem({%depvar}, %trainend)
+		changes = @recode(changes=0, 1e-08, changes) 'recode 0s to small positives (treat 0 as positive)
+		
+		'if change in fcst and change in actual are in the same direciton, the sign was correct
+		series ERR_SGN_{%fcststart} = (({%depvar}_f_{%fcststart} -  !last_hist_point) / changes) > 0 '1 if correct sign, 0 otherwise
+		if @isobject("smpl") then
+			delete smpl
+		endif	
+		sample smpl %longfcststart %fcstend	
+		vector V_ERR_SGN_{%fcststart} = @convert(ERR_SGN_{%fcststart}, smpl)
+		%v_err_sgn = %v_err_sgn + "V_ERR_SGN_" + %fcststart + " " 'populate sign vector namelist
+		
+		'ERROR 4: Sums for sMAPE (see http://robjhyndman.com/hyndsight/smape/)
+		smpl @all
+		series ERR_SYM_{%fcststart} = 2*@abs({%depvar} - {%depvar}_f_{%fcststart})/(@abs({%depvar}) + @abs({%depvar}_f_{%fcststart}))
+		if @isobject("smpl") then
+			delete smpl
+		endif	
+		sample smpl %longfcststart %fcstend	
+		vector V_ERR_SYM_{%fcststart} = @convert(ERR_SYM_{%fcststart}, smpl)
+		%v_err_sym = %v_err_sym + "V_ERR_SYM_" + %fcststart + " " 'populate symmetric error vector namelist
+		
 	'*****		
-	'%forecasts = %forecasts + %depvar+"_f_"+%fcststart+" " 'creating a list of all series that are forecasted
+	%forecasts = %forecasts + %depvar+"_f_"+%fcststart+" " 'creating a list of all series that are forecasted
 	smpl @all
 next
 
@@ -262,21 +297,25 @@ for !col=1 to !toteqs
 	%head = @str(!col)
 	t_result(2, !col+!indent) = %head
 	
-	%counter = @str(!col)
+	%horizon = @str(!col)
 	'Absolute Errors
-	!MAE  = @mean(@abs(e_v_err_{%counter}))
-	!MSE = @mean(@epow(e_v_err_{%counter},2))
-	!MSFE = !MSE
+	!MAE  = @mean(@abs(e_v_err_{%horizon}))
+	!MSE = @mean(@epow(e_v_err_{%horizon},2))
+	!MSFE = !MSE 'some people use different terms
 	!RMSE = @sqrt(!MSE)
-	!medAE = @median(@abs(e_v_err_{%counter}))
+	!medAE = @median(@abs(e_v_err_{%horizon}))
 	
 	'Percentage Errors
-	!MAPE = @mean(@abs(e_v_err_pc_{%counter}))
-	!MPE = @mean(e_v_err_pc_{%counter})
-	!MSPE = @mean(@epow(e_v_err_pc_{%counter},2))
+	!MAPE = @mean(@abs(e_v_err_pc_{%horizon}))
+	!MPE = @mean(e_v_err_pc_{%horizon})
+	!MSPE = @mean(@epow(e_v_err_pc_{%horizon},2))
 	!RMSPE = @sqrt(!MSPE)
-	!SMAPE = @mean(e_v_err_pc_{%counter})
-	!medPE = @med(@abs(e_v_err_pc_{%counter}))
+	!SMAPE = @mean(e_v_err_sym_{%horizon})
+	!medPE = @med(@abs(e_v_err_pc_{%horizon}))
+	
+	'Sign errors
+	!SIGN = @sum(e_v_err_sgn_{%horizon})
+	!SIGNP = 100*(!SIGN/@obs(e_v_err_sgn_{%horizon}))
 	
 	v_{%err_measure}(!col) = !{%err_measure}	
 	t_result(4, !col+!indent) = !{%err_measure}	
@@ -292,13 +331,13 @@ show t_result
 logmsg Step 5: Creating a Single Vector of Errors
 
 wfselect {%wf}\{%pagename}
-%resulttablename = @getnextname("t_result_")
-%errorvecotrname = @getnextname("v_"+%err_measure+"_")
+%resulttable = @getnextname("t_result_")
+%errorvectorname = @getnextname("v_"+%err_measure+"_")
 
-copy {%newpage}\t_result {%pagename}\{%resulttablename}
-copy {%newpage}\v_{%err_measure} {%pagename}\{%errorvecotrname}
+copy {%newpage}\t_result {%pagename}\{%resulttable}
+copy {%newpage}\v_{%err_measure} {%pagename}\{%errorvectorname}
 
-if !keep = 1 then
+if !keep_fcst = 1 then
 	for %each {%forecastseries}
 		%seriesname = @getnextname(%each+"_")
 		copy {%newpage}\{%each} {%pagename}\{%seriesname}
@@ -310,10 +349,14 @@ pagedelete {%newpage}
 'if this was run from the GUI (on one equation), show the table of results
 wfselect {%wf}\{%pagename}
 if !dogui=1 then
-	show {%resulttablename}
+	show {%resulttable}
 endif
 
 'Program Complete
 logmsg Program is Complete
+
+'##########################################################################################################
+'##########################################################################################################
+'##########################################################################################################
 
 

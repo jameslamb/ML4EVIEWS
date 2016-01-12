@@ -1,0 +1,8 @@
+'===========================================References===================================================='
+'
+'1. http://faculty.smu.edu/tfomby/eco5385/lecture/Scoring%20Measures%20for%20Prediction%20Problems.pdf
+'2. http://robjhyndman.com/hyndsight/tscvexample/
+'3. http://robjhyndman.com/hyndsight/crossvalidation/
+'4. http://robjhyndman.com/hyndsight/smape/
+'5. http://robjhyndman.com/papers/foresight.pdf
+'6. Z. Chen and Y. Yang, 2004, Assessing forecast accuracy measures, Preprint Series, n. 2004-2010, p. 2004-10. Retrieved from: https://www.researchgate.net/profile/Zhuo_Chen5/publication/228774888_Assessing_forecast_accuracy_measures/links/02bfe50da5f6e9d263000000.pdf

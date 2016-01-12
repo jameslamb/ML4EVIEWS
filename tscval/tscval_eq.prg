@@ -2,10 +2,10 @@
 
 'Description: 
 ' 	Program which takes an equation, rolls the sample, keeps producing forecasts,
-' 	then stacks up vectors by horizon and computes errors at different horizons.
+' 	then stacks up vectors by horizon and computes errors at different horizons and for different error types
 ' 	Returns a few objects in the wf:
-'		1. T_ACC --> a table with the eq name and error (see below) by forecast horizon
-'		2. V_{%eq}_{%ERR_MEASURE} --> a vector for the given equation, where element 1 is 1-step-ahead, elem 2 is 2-step, etc.
+'		1. T_ACC_{%err} --> a table with the eq name and error (see below) by forecast horizon | e.g. t_acc_mape
+'		2. V_{%err} --> a vector for the given equation, where element 1 is 1-step-ahead, elem 2 is 2-step, etc. | e.g. "v_mape"
 
 '##########################################################################################################
 '##########################################################################################################
@@ -66,17 +66,17 @@ if !dogui = 1 then
 	'Initialize with reasonable values
 	%holdout = "0.10" 'default to testing over 10% of the training range
 	%fullsample = %pagerange '%training_range
-	%err_measure = "MAE"
+	%err_measures = "MAE"
 	!keep_fcst = 0
 			
 	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
-		"list", %err_measure, "Preferred error measure", %error_types, "Check", !keep_fcst, "Keep the forecast series objects?" )	
+		"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_fcst, "Keep the forecast series objects?" )	
 	'Map human-readable values to params
-	if %err_measure = "Correct sign (count)" then
-		%err_measure = "SIGN"
+	if %err_measures = "Correct sign (count)" then
+		%err_measures = "SIGN"
 	endif
-	if %err_measure = "Correct sign (%)" then
-		%err_measure = "SIGNP"
+	if %err_measures = "Correct sign (%)" then
+		%err_measures = "SIGNP"
 	endif		
 	!holdout = @val(%holdout)	
 endif
@@ -90,7 +90,7 @@ endif
 if !dogui =0 then 'extract options passed through the program or use defaults if nothing is passed
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
-	%err_measure = @equaloption("ERR") 
+	%err_measures = @equaloption("ERR") 
 	!keep_fcst = @val(@equaloption("K"))
 endif
 
@@ -150,7 +150,6 @@ wfselect {%wf}\{%newpage}
 'count # of obs in the training set
 logmsg STEP 1: Checking/Modifying Samples - Cut Sample into Training and Testing Ranges
 !trainobscount  = @round((@dtoo(@word(%fullsample,2))-@dtoo(@word(%fullsample,1)))*(1-!holdout))
-!test = @dtoo(@word(%fullsample,2))-@dtoo(@word(%fullsample,1))
 %shorttrainend = @otod(!trainobscount+@dtoo(%earliest)) 'this is the end of the training sample
 %longfcststart = @otod(@dtoo(%shorttrainend)+1)'where longest forecast begins
 !toteqs = @dtoo(@word(%fullsample,2))-@dtoo(%shorttrainend) 'total numbers of estimations
@@ -250,92 +249,113 @@ for %list {%vectornamelists}
 	endif
 	
 	matrix(!toteqs, !toteqs) m_matrix
-	!count=1
-	
-	if @isobject("dropvector") then
-		delete dropvector
-	endif
-	
-	vector(!toteqs) dropvector=0
-	for !i=1 to !toteqs
-		dropvector(!i) = !i
-	next
-	
+
 	'Create Vectors with N-Step Ahead Error
-	%e_{%list} = ""
+	
+	'Assemble the vectors in a matrix
 	for %each {%{%list}}
-		%count = @str(!count)
+		!count = @wfind(%{%list}, %each)
 		colplace(m_matrix, {%each}, !count)
-		if @rows(dropvector)>1 then	
-			dropvector = dropvector.@droprow(1)
-		vector e_{%list}_{%count} = m_matrix.@row(!count)
-		e_{%list}_{%count} = e_{%list}_{%count}.@droprow(dropvector)
-		else
-		vector e_{%list}_{%count} = m_matrix.@row(!count)	
-		endif
-		%e_{%list} = %e_{%list} + "e_"+%list+"_"+%row+" "
-		!count=!count+1
 	next
+	
+	'Go through and grab each vector (1-period ahead is on the main diagonal of the full matrix)
+	!horizon = 1
+	while 1
+		if @rows(m_matrix) > 1 then
+			'grab the forecast
+			vector e_{%list}_{!horizon} = m_matrix.@diag
+			
+			'the matrix is upper traingular...remove row 1 and the last column
+			!cols = @columns(m_matrix)
+			m_matrix = m_matrix.@dropcol(!cols)
+			m_matrix = m_matrix.@droprow(1)
+			
+			'increment the horizon
+			!horizon = !horizon + 1
+		else
+			'grab the last (longest) forecast
+			vector e_{%list}_{!horizon} = m_matrix.@diag
+			
+			exitloop 'we're done here
+		endif
+	wend
+	
 next
 
 'STEP 4: Creating the Forecast Evaluation Table
-logmsg STEP4: Creating the Forecast Evaluation Table
+logmsg STEP4: Creating the Forecast Evaluation Table(s)
 
-table t_result
+for %err {%err_measures} '1 table per error measure
 
-t_result(1,3) = "STEPS AHEAD ==>"
-t_result(2,1) = "EQUATION"
-t_result(3,1) = %eq
-t_result(3,2) = "FORECASTS:"
-t_result(4,2) = %err_measure+":"
-
-!indent = t_result.@cols+1
-
-vector(!toteqs) V_{%err_measure}
-
-for !col=1 to !toteqs
-	%head = @str(!col)
-	t_result(2, !col+!indent) = %head
+	%table = "T_ACC_" + %err
+	table {%table}
 	
-	%horizon = @str(!col)
-	'Absolute Errors
-	!MAE  = @mean(@abs(e_v_err_{%horizon}))
-	!MSE = @mean(@epow(e_v_err_{%horizon},2))
-	!MSFE = !MSE 'some people use different terms
-	!RMSE = @sqrt(!MSE)
-	!medAE = @median(@abs(e_v_err_{%horizon}))
+	{%table}(1,3) = "STEPS AHEAD ==>"
+	{%table}(2,1) = "EQUATION"
+	{%table}(3,1) = %eq
+	{%table}(3,2) = "FORECASTS:"
+	{%table}(4,1) = %eq
+	{%table}(4,2) = %err + ":"
 	
-	'Percentage Errors
-	!MAPE = @mean(@abs(e_v_err_pc_{%horizon}))
-	!MPE = @mean(e_v_err_pc_{%horizon})
-	!MSPE = @mean(@epow(e_v_err_pc_{%horizon},2))
-	!RMSPE = @sqrt(!MSPE)
-	!SMAPE = @mean(e_v_err_sym_{%horizon})
-	!medPE = @med(@abs(e_v_err_pc_{%horizon}))
+	!indent = 2 'two columns of metadata in column 1 (equation name, row labels)
 	
-	'Sign errors
-	!SIGN = @sum(e_v_err_sgn_{%horizon})
-	!SIGNP = 100*(!SIGN/@obs(e_v_err_sgn_{%horizon}))
+	vector(!toteqs) V_{%err}
 	
-	v_{%err_measure}(!col) = !{%err_measure}	
-	t_result(4, !col+!indent) = !{%err_measure}	
-next
-
-!cols = @columns(t_result)
-t_result.setformat(R3C3:R4C{!cols}) f.3 'only display three decimal places
-t_result.setlines(R2C1:R2C{!cols}) +b 'underline the header row
+	'fill in the table with error measures
+	for !col=1 to !toteqs
+		%head = @str(!col)
+		{%table}(2, !col+!indent) = %head
 		
-show t_result
-
-'STEP 5: Creaing a Single Vector of Errors
-logmsg Step 5: Creating a Single Vector of Errors
-
-wfselect {%wf}\{%pagename}
-%resulttable = @getnextname("t_result_")
-%errorvectorname = @getnextname("v_"+%err_measure+"_")
-
-copy {%newpage}\t_result {%pagename}\{%resulttable}
-copy {%newpage}\v_{%err_measure} {%pagename}\{%errorvectorname}
+		%horizon = @str(!col)
+		'Absolute Errors
+		!MAE  = @mean(@abs(e_v_err_{%horizon}))
+		!MSE = @mean(@epow(e_v_err_{%horizon},2))
+		!MSFE = !MSE 'some people use different terms
+		!RMSE = @sqrt(!MSE)
+		!medAE = @median(@abs(e_v_err_{%horizon}))
+		
+		'Percentage Errors
+		!MAPE = @mean(@abs(e_v_err_pc_{%horizon}))
+		!MPE = @mean(e_v_err_pc_{%horizon})
+		!MSPE = @mean(@epow(e_v_err_pc_{%horizon},2))
+		!RMSPE = @sqrt(!MSPE)
+		!SMAPE = @mean(e_v_err_sym_{%horizon})
+		!medPE = @med(@abs(e_v_err_pc_{%horizon}))
+		
+		'Sign errors
+		!SIGN = @sum(e_v_err_sgn_{%horizon})
+		!SIGNP = 100*(!SIGN/@obs(e_v_err_sgn_{%horizon}))
+		
+		'How many forecasts did we have at this horizon?
+		!obs = @obs(e_v_err_{%horizon})
+		{%table}(3, !col+!indent) = @str(!obs)
+		
+		'STEP 5: Creaing a Single Vector of Errors
+		'How good was the forecast at this horizon?
+		v_{%err}(!col) = !{%err}	
+		{%table}(4, !col+!indent) = !{%err}	
+	next
+	
+	!cols = @columns({%table})
+	{%table}.setformat(R3C3:R4C{!cols}) f.3 'only display three decimal places
+	{%table}.setlines(R2C1:R2C{!cols}) +b 'underline the header row
+	
+	'tag these objects with the equation name
+	for %object {%table} v_{%err}
+		{%object}.setattr(Source_Equation) {%eq}
+	next
+	
+	'Copy over to the main page, make sure we don't overwrite existing objects
+	wfselect {%wf}\{%pagename}
+	%resulttable = @getnextname(%table)
+	%errorvector = @getnextname("v_"+%err+"_")
+	
+	copy {%newpage}\{%table} {%pagename}\{%resulttable}
+	copy {%newpage}\v_{%err} {%pagename}\{%errorvector}
+	
+	'be sure to select back to the temporary page
+	wfselect {%wf}\{%newpage} 
+next 'done looping over error measures
 
 if !keep_fcst = 1 then
 	for %each {%forecastseries}

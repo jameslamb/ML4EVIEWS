@@ -2,6 +2,8 @@
 
 '##########################################################################################################
 
+	mode quiet
+	setmaxerrs 1
 		
 	'Create workfile
 	wfcreate(wf=CV_EXAMPLE, page = DATA_M) q 1920 2020 'wf=CV_EXAMPLE, 
@@ -13,12 +15,11 @@
 	equation eq_01.ls d(indpro) c ar(1)
 	equation eq_02.ls d(indpro) c ar(1) ar(2) ma(1)
 	equation eq_03.ls indpro c @trend @trend^2
-
+	
 	'Cross validate each
 	%eqs = @wlookup("EQ_*", "equation")
 	for %eq {%eqs}
-		{%eq}.tscval(ERR="SMAPE")
-		rename t_result_01 t_{%eq}_acc
+		{%eq}.tscval(ERR="MAE MSE MAPE")
 	next
 		
 

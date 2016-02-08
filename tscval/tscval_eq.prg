@@ -33,7 +33,7 @@ endif
 		
 'check that the object is an equation
 if %type<>"EQUATION" then
-	@uiprompt("Procedure can only be run from an Equation object")
+	@uiprompt("Procedure can only be run from an Equation or a VAR object")
 	stop
 endif
 

@@ -2,7 +2,7 @@ setmaxerrs 1
 mode quiet
 logmode logmsg
 		
-!debug = 1 'set to 1 if you want the logmsgs to display
+!debug = 0 'set to 1 if you want the logmsgs to display
 
 if !debug = 0 then
 	logmode +addin
@@ -11,6 +11,18 @@ else
 endif
 
 logmsg Running PROC on VAR
+
+'--- Check that we are on a time series page ---'
+if @pagefreq = "u" or @ispanel then
+	seterr "Procedure must be run on a time-series page."
+	stop
+endif
+
+'--- Check the version ---'
+if @vernum < 9 then
+	seterr "EViews version 9.0 or higher is required to run this add-in."
+	stop
+endif
 
 'STEP 1: Figure out if the add-in is run through GUI or programmatically
 !dogui=0
@@ -220,7 +232,7 @@ for !i = 0 to !toteqs-1
 		series changes = {%variable} - @elem({%variable}, %trainend)
 		changes = @recode(changes=0, 1e-08, changes) 'recode 0s to small positives (treat 0 as positive)
 		
-		'if change in fcst and change in actual are in the same direciton, the sign was correct
+		'if change in fcst and change in actual are in the same direction, the sign was correct
 		series ERR_SGN_{%variable}_{%index} = (({%variable}_{%index} -  !last_hist_point) / changes) > 0 '1 if correct sign, 0 otherwise
 		if @isobject("smpl") then
 			delete smpl
@@ -297,9 +309,9 @@ for %old %new {%endogwinterleave}
 		
 		{%table}(1,3) = "STEPS AHEAD ==>"
 		{%table}(2,1) = "EQUATION"
-		{%table}(3,1) = %eq
+		{%table}(3,1) = %var
 		{%table}(3,2) = "FORECASTS:"
-		{%table}(4,1) = %eq
+		{%table}(4,1) = %var
 		{%table}(4,2) = %err + ":"
 		
 		!indent = 2 'two columns of metadata in column 1 (equation name, row labels)

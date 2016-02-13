@@ -16,24 +16,23 @@ logmode logmsg
 
 'NOTE: Currently only supports equation objects (no VARs)
 		
-!debug = 1 'set to 1 if you want the logmsgs to display
+!debug = 0 'set to 1 if you want the logmsgs to display
 
 if !debug = 0 then
 	logmode +addin
 else
 	logmsg 'pop up the log
 endif
-		
-'check that an object exists
-%type = @getthistype
-if %type="NONE" then
-	@uiprompt("No object found, please open an Equation object")
+
+'--- Check that we are on a time series page ---'
+if @pagefreq = "u" or @ispanel then
+	seterr "Procedure must be run on a time-series page."
 	stop
 endif
-		
-'check that the object is an equation
-if %type<>"EQUATION" then
-	@uiprompt("Procedure can only be run from an Equation or a VAR object")
+
+'--- Check the version ---'
+if @vernum < 9 then
+	seterr "EViews version 9.0 or higher is required to run this add-in."
 	stop
 endif
 
@@ -216,7 +215,7 @@ for !i = 0 to !toteqs-1
 		series changes = {%depvar} - @elem({%depvar}, %trainend)
 		changes = @recode(changes=0, 1e-08, changes) 'recode 0s to small positives (treat 0 as positive)
 		
-		'if change in fcst and change in actual are in the same direciton, the sign was correct
+		'if change in fcst and change in actual are in the same direction, the sign was correct
 		series ERR_SGN_{%fcststart} = (({%depvar}_f_{%fcststart} -  !last_hist_point) / changes) > 0 '1 if correct sign, 0 otherwise
 		if @isobject("smpl") then
 			delete smpl

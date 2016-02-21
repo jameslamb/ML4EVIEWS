@@ -123,6 +123,7 @@ smpl %pagesmpl
 copy(g=d) {%pagename}\{%reggroup} {%newpage}\
 copy {%pagename}\{%var} {%newpage}\
 delete %reggroup
+delete %regmat
 
 ''move to the new page
 wfselect {%wf}\{%newpage}
@@ -288,19 +289,18 @@ next
 
 'STEP 4: Creating the Forecast Evaluation Table
 logmsg STEP4: Creating the Forecast Evaluation Table(s)
-%tables = ""
-for %old %new {%endogwinterleave}
-	for %err {%err_measures} '1 table per error measure
-		
-		%table = "T_"+%old+"_"+ %err
-		table {%table}
-		
+
+for %err {%err_measures} '1 table per error measure
+	%table = "T_"+ %err
+	table {%table}
+	!row=4
+	for %old %new {%endogwinterleave}		
 		{%table}(1,3) = "STEPS AHEAD ==>"
-		{%table}(2,1) = "EQUATION"
-		{%table}(3,1) = %eq
+		{%table}(2,1) = "VAR"
+		{%table}(2,2) = %var
 		{%table}(3,2) = "FORECASTS:"
-		{%table}(4,1) = %eq
-		{%table}(4,2) = %err + ":"
+		{%table}(!row,1) = %old
+		{%table}(!row,2) = %err + ":"
 		
 		!indent = 2 'two columns of metadata in column 1 (equation name, row labels)
 		vector(!toteqs) V_{%new}_{%err}
@@ -338,29 +338,10 @@ for %old %new {%endogwinterleave}
 			'logmsg STEP 5: Creating a Single Vector of Errors
 			'How good was the forecast at this horizon?
 			v_{%new}_{%err}(!col) = !{%err}	
-			{%table}(4, !col+!indent) = !{%err}			
+			{%table}(!row, !col+!indent) = !{%err}			
 		next	
-		
+		!row=!row+1
 		!cols = @columns({%table})
-		{%table}.setformat(R3C3:R4C{!cols}) f.3 'only display three decimal places
-		{%table}.setlines(R2C1:R2C{!cols}) +b 'underline the header row
-		
-		'tag these objects with the equation name
-		for %object {%table} v_{%new}_{%err}
-			{%object}.setattr(Source_Equation) {%var}
-		next
-		
-	'Copy over to the main page, make sure we don't overwrite existing objects
-	wfselect {%wf}\{%pagename}
-	
-	if @isobject(%table) then
-		%resulttable = @getnextname(%table)	
-	else
-		%resulttable = %table	
-	endif
-	
-	%tables = %tables+%resulttable+" "
-	
 	if @isobject("v_"+%err+"_"+%old)then
 		%errorvector = @getnextname("v_"+%err+"_"+%old+"_")
 		else
@@ -368,11 +349,20 @@ for %old %new {%endogwinterleave}
 	endif
 	
 	wfselect {%wf}\{%newpage}
-	copy {%newpage}\{%table} {%pagename}\{%resulttable}
 	copy {%newpage}\v_{%new}_{%err} {%pagename}\{%errorvector}
+	{%table}.setformat(R3C3:R{!row}C{!cols}) f.3 'only display three decimal places
 	next
-next	
+	{%table}.setlines(R2C1:R2C{!cols}) +b 'underline the header row
+next
 
+	wfselect {%wf}\{%pagename}
+	if @isobject(%table) then
+		%resulttable = @getnextname(%table)	
+	else
+		%resulttable = %table	
+	endif	
+	copy {%newpage}\{%table} {%pagename}\{%resulttable}
+	
 	if !keep_fcst = 1 then
 		for %each {%forecasts}			
 			wfselect {%wf}\{%pagename}
@@ -386,15 +376,12 @@ next
 		next
 	endif
 	wfselect {%wf}\{%newpage}
-
 	pagedelete {%newpage}
-	
+
 'if this was run from the GUI (on one equation), show the table of results
 wfselect {%wf}\{%pagename}
 if !dogui=1 then
-	for %each {%tables}
-		show {%each}
-	next
+		show {%table}
 endif
 
 'Program Complete

@@ -7,12 +7,9 @@
 '		1. T_ACC_{%err} --> a table with the eq name and error (see below) by forecast horizon | e.g. t_acc_mape
 '		2. V_{%err} --> a vector for the given equation, where element 1 is 1-step-ahead, elem 2 is 2-step, etc. | e.g. "v_mape"
 
-'##########################################################################################################
-'##########################################################################################################
-'##########################################################################################################
+'##############################################################################
 setmaxerrs 1
 mode quiet
-logmode logmsg
 
 'NOTE: Currently only supports equation objects (no VARs)
 		
@@ -149,18 +146,16 @@ wfselect {%wf}\{%newpage}
 'count # of obs in the training set
 logmsg STEP 1: Checking/Modifying Samples - Cut Sample into Training and Testing Ranges
 !trainobscount  = @round((@dtoo(@word(%fullsample,2))-@dtoo(@word(%fullsample,1)))*(1-!holdout))
-%shorttrainend = @otod(!trainobscount+@dtoo(%earliest)) 'this is the end of the training sample
+'%shorttrainend = @otod(!trainobscount+@dtoo(%earliest)) 'this is the end of the training sample
+%shorttrainend = @otod(!trainobscount+@dtoo(@word(%fullsample,1))) 'this is the end of the training sample
 %longfcststart = @otod(@dtoo(%shorttrainend)+1)'where longest forecast begins
 !toteqs = @dtoo(@word(%fullsample,2))-@dtoo(%shorttrainend) 'total numbers of estimations
 
 'STEP 2: Running Estimates
 logmsg STEP 2: Running Estimates
-
-
 'Name Lists that Need to Be Populated
 
 %forecasts = "" 'list of forecasts
-
 %v_err = "" 'traditional level errors (yhat-y)
 %v_err_pc = "" 'percentage errors
 %v_err_sgn = "" 'sign errors (direction of change
@@ -169,8 +164,8 @@ logmsg STEP 2: Running Estimates
 %vectornamelists = "v_err v_err_pc v_err_sgn v_err_sym" 'list of vector namelists
 
 %forecastseries = ""
-for !i = 0 to !toteqs-1
-	
+
+for !i = 0 to !toteqs-1	
 	'Date Strings
 	%trainend = @otod(@dtoo(%shorttrainend)+!i) 'end of the training sample (incremented by 1 in each loop step)
 	%trainstart = @word(%fullsample,1) 'beginning of the training sample
@@ -178,6 +173,7 @@ for !i = 0 to !toteqs-1
 	%fcstend = @word(%fullsample,2) 'end of the forecast
 	
 	'Estimate the model over this sample
+	'logmsg %trainstart %trainend
 	smpl %trainstart %trainend
 	{%eq}.{%command} 're-estimate the equation
 	
@@ -185,7 +181,6 @@ for !i = 0 to !toteqs-1
 	smpl %fcststart %fcstend
 	{%eq}.forecast(f=actual) {%depvar}_f_{%fcststart} 'create forecasts
 	%forecastseries  = %forecastseries + %depvar+"_f_"+%fcststart+" " 'list of all forecasted series
-	
 	'*****Calculate Errors
 		'ERROR 1: Absolute Errors
 		smpl @all
@@ -286,7 +281,7 @@ logmsg STEP4: Creating the Forecast Evaluation Table(s)
 
 for %err {%err_measures} '1 table per error measure
 
-	%table = "T_ACC_" + %err
+	%table = "T_"+ %eq +"_" + %err
 	table {%table}
 	
 	{%table}(1,3) = "STEPS AHEAD ==>"
@@ -298,7 +293,7 @@ for %err {%err_measures} '1 table per error measure
 	
 	!indent = 2 'two columns of metadata in column 1 (equation name, row labels)
 	
-	vector(!toteqs) V_{%err}
+	vector(!toteqs) V_{%eq}_{%err}
 	
 	'fill in the table with error measures
 	for !col=1 to !toteqs
@@ -331,7 +326,7 @@ for %err {%err_measures} '1 table per error measure
 		
 		'STEP 5: Creaing a Single Vector of Errors
 		'How good was the forecast at this horizon?
-		v_{%err}(!col) = !{%err}	
+		v_{%eq}_{%err}(!col) = !{%err}	
 		{%table}(4, !col+!indent) = !{%err}	
 	next
 	
@@ -340,7 +335,7 @@ for %err {%err_measures} '1 table per error measure
 	{%table}.setlines(R2C1:R2C{!cols}) +b 'underline the header row
 	
 	'tag these objects with the equation name
-	for %object {%table} v_{%err}
+	for %object {%table} v_{%eq}_{%err}
 		{%object}.setattr(Source_Equation) {%eq}
 	next
 	
@@ -352,14 +347,14 @@ for %err {%err_measures} '1 table per error measure
 		%resulttable = %table
 	endif	
 	
-	if @isobject("v_"+%err) then
-		%errorvector = @getnextname("v_"+%err+"_")
+	if @isobject("v_"+%eq+"_"+%err) then
+		%errorvector = @getnextname("v_"+%eq+"_"+%err)
 	else
-		%errorvector = 	"v_"+%err
+		%errorvector = 	"v_"+%eq+"_"+%err
 	endif	
 	
 	copy {%newpage}\{%table} {%pagename}\{%resulttable}
-	copy {%newpage}\v_{%err} {%pagename}\{%errorvector}
+	copy {%newpage}\v_{%eq}_{%err} {%pagename}\{%errorvector}
 	
 	'be sure to select back to the temporary page
 	wfselect {%wf}\{%newpage} 
@@ -390,6 +385,5 @@ endif
 logmsg Program is Complete
 
 '##################################################################################
-
 
 

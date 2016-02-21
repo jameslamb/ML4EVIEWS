@@ -1,5 +1,4 @@
-	
-
+	logmode logmsg
 	'This runs first when tscval() is run progammatically. It supplies defaults for unspecified arguments.
 
 	'Option 1 = The full range we train models over
@@ -8,7 +7,7 @@
 	else 
 		%fullsample  =  @pagerange 
    	endif 
-		
+
 	'Option 2 =  what % of the sample should we use to test? 
 	if @equaloption("H")<>"" then 
    		!holdout = @val(@equaloption("H")) 'maximum % of the training range to forecast over 

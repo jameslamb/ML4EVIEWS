@@ -164,7 +164,7 @@ var var_new.{%command}
 'count # of obs in the training set
 logmsg STEP 1: Checking/Modifying Samples - Cut Sample into Training and Testing Ranges
 !trainobscount  = @round((@dtoo(@word(%fullsample,2))-@dtoo(@word(%fullsample,1)))*(1-!holdout))
-%shorttrainend = @otod(!trainobscount+@dtoo(%earliest)) 'this is the end of the training sample
+%shorttrainend = @otod(!trainobscount+@dtoo(@word(%fullsample,1))) 'this is the end of the training sample
 %longfcststart = @otod(@dtoo(%shorttrainend)+1)'where longest forecast begins
 !toteqs = @dtoo(@word(%fullsample,2))-@dtoo(%shorttrainend) 'total numbers of estimations
 
@@ -303,7 +303,8 @@ next
 logmsg STEP4: Creating the Forecast Evaluation Table(s)
 
 for %err {%err_measures} '1 table per error measure
-	%table = "T_"+ %err
+	wfselect {%wf}\{%newpage}
+	%table = "T_"+%var+"_"+ %err
 	table {%table}
 	!row=4
 	for %old %new {%endogwinterleave}		
@@ -354,10 +355,10 @@ for %err {%err_measures} '1 table per error measure
 		next	
 		!row=!row+1
 		!cols = @columns({%table})
-	if @isobject("v_"+%err+"_"+%old)then
-		%errorvector = @getnextname("v_"+%err+"_"+%old+"_")
+	if @isobject("v_"+%var+"_"+%err+"_"+%old)then
+		%errorvector = @getnextname("v_"+%var+"_"+%err+"_"+%old+"_")
 		else
-		%errorvector = 	"v_"+%err+"_"+%old
+		%errorvector = 	"v_"+%var+"_"+%err+"_"+%old
 	endif
 	
 	wfselect {%wf}\{%newpage}
@@ -365,15 +366,16 @@ for %err {%err_measures} '1 table per error measure
 	{%table}.setformat(R3C3:R{!row}C{!cols}) f.3 'only display three decimal places
 	next
 	{%table}.setlines(R2C1:R2C{!cols}) +b 'underline the header row
-next
-
-	wfselect {%wf}\{%pagename}
+	
+	wfselect {%wf}\{%pagename} 'copy the tables into the original page
 	if @isobject(%table) then
 		%resulttable = @getnextname(%table)	
 	else
 		%resulttable = %table	
 	endif	
 	copy {%newpage}\{%table} {%pagename}\{%resulttable}
+next
+
 	
 	if !keep_fcst = 1 then
 		for %each {%forecasts}			

@@ -40,6 +40,9 @@
 	else
 		if %type = "VAR" then
 			exec ".\tscval_var.prg"(sample = {%fullsample}, H = {%holdout}, ERR = {%err_measure}, K = {%keep_fcst}, PROC)
+		else
+			seterr "This add-in must be run from an equation or VAR object."
+			stop
 		endif
 	endif
 

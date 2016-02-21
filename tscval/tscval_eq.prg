@@ -346,8 +346,17 @@ for %err {%err_measures} '1 table per error measure
 	
 	'Copy over to the main page, make sure we don't overwrite existing objects
 	wfselect {%wf}\{%pagename}
-	%resulttable = @getnextname(%table)
-	%errorvector = @getnextname("v_"+%err+"_")
+	if @isobject(%table) then
+		%resulttable = @getnextname(%table)
+	else
+		%resulttable = %table
+	endif	
+	
+	if @isobject("v_"+%err) then
+		%errorvector = @getnextname("v_"+%err+"_")
+	else
+		%errorvector = 	"v_"+%err
+	endif	
 	
 	copy {%newpage}\{%table} {%pagename}\{%resulttable}
 	copy {%newpage}\v_{%err} {%pagename}\{%errorvector}
@@ -356,9 +365,15 @@ for %err {%err_measures} '1 table per error measure
 	wfselect {%wf}\{%newpage} 
 next 'done looping over error measures
 
+	wfselect {%wf}\{%pagename} 
+
 if !keep_fcst = 1 then
 	for %each {%forecastseries}
-		%seriesname = @getnextname(%each+"_")
+		if @isobject(%each) then
+			%seriesname = @getnextname(%each+"_")
+		else 
+			%seriesname = %each
+		endif	
 		copy {%newpage}\{%each} {%pagename}\{%seriesname}
 	next
 endif
@@ -374,8 +389,7 @@ endif
 'Program Complete
 logmsg Program is Complete
 
-'##########################################################################################################
-'##########################################################################################################
-'##########################################################################################################
+'##################################################################################
+
 
 

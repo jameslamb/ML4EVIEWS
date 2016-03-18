@@ -1,48 +1,44 @@
-	logmode logmsg
 	'This runs first when tscval() is run progammatically. It supplies defaults for unspecified arguments.
 
-	'Option 1 = The full range we train models over
+	'--- Option 1: The full range we train and evaluate models over ---'
 	if @equaloption("SAMPLE")<>"" then 
-		%fullsample  = @equaloption("SAMPLE") 'returns actual option value to the right of the equation
+		%fullsample  = @equaloption("SAMPLE")
 	else 
 		%fullsample  =  @pagerange 
    	endif 
 
-	'Option 2 =  what % of the sample should we use to test? 
+	'--- Option 2:  What % of the sample (%fullsample) should we use to test? ---'
 	if @equaloption("H")<>"" then 
    		!holdout = @val(@equaloption("H")) 'maximum % of the training range to forecast over 
 	else 
 		!holdout = 0.1	 
 	endif 
 	
-	%holdout = @str(!holdout)
-	
-	'Option 3 = What error measure do you prefer? 
+	'--- Option 3: What error measure(s) do you want? ---'
 	if @equaloption("ERR")<>"" then 
-		%err_measure = @equaloption("ERR")   
-		else  
-		%err_measure = "MSE" 
+		%err_measures = @equaloption("ERR")   
+	else  
+		%err_measures = "MSE" 
 	endif 
 
-	'Option 4 = Do you want to keep the forecast series objects?
-	!keep_fcst = 0 
-	if @equaloption("K")<>"" then 
-		%keep = @equaloption("K") 
-		!keep_fcst = (@upper(%keep)="TRUE") or (@upper(@left(%keep,1))="T") 
-	endif
-	%keep_fcst = @str(!keep_fcst)
-	
-	'Call different programs based on type of object
+	'--- Call different programs based on type of object ---'
 	%type = @getthistype
-	if %type = "EQUATION" then
-		exec ".\tscval_eq.prg"(sample = {%fullsample}, H = {%holdout}, ERR = {%err_measure}, K = {%keep_fcst}, PROC)
-	else
-		if %type = "VAR" then
-			exec ".\tscval_var.prg"(sample = {%fullsample}, H = {%holdout}, ERR = {%err_measure}, K = {%keep_fcst}, PROC)
-		else
-			seterr "This add-in must be run from an equation or VAR object."
-			stop
+	while 1
+		
+		'--- Case 1. Equation object ---'
+		if %type = "EQUATION" then
+			exec ".\tscval_eq.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measures}, PROC)
+			exitloop
 		endif
-	endif
+		
+		'--- Case 2. VAR object ---'
+		if %type = "VAR" then
+			exec ".\tscval_var.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measure}, PROC)
+			exitloop
+		endif
+		
+		'--- Case 3. Other type of object ---'
+		seterr "This add-in must be run from an equation or VAR object."
+	wend
 
 

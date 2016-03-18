@@ -48,16 +48,15 @@ logmsg Getting Environment Info
 !result=0
 'Set up the GUI
 if !dogui = 1 then
-	!keep_fcst = 0
+	
 	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
 	'Initialize with reasonable values
 	%holdout = "0.10" 'default to testing over 10% of the training range
 	%fullsample = %pagerange '%training_range
 	%err_measures = "MAE"
-	!keep_fcst = 0
 			
 	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
-		"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_fcst, "Keep the forecast series objects?" )	
+		"list", %err_measures, "Preferred error measure", %error_types)	
 	'Map human-readable values to params
 	if %err_measures = "Correct sign (count)" then
 		%err_measures = "SIGN"
@@ -77,8 +76,7 @@ endif
 if !dogui =0 then 'extract options passed through the program or use defaults if nothing is passed
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
-	%err_measures = @equaloption("ERR") 
-	!keep_fcst = @val(@equaloption("K"))
+	%err_measures = @equaloption("ERR")
 endif
 
 'Create new page for subsequent work
@@ -376,18 +374,18 @@ for %err {%err_measures} '1 table per error measure
 next
 
 	
-	if !keep_fcst = 1 then
-		for %each {%forecasts}			
-			wfselect {%wf}\{%original_page}
-			if @isobject(%each) then
-				%seriesname = @getnextname(%each+"_")
-			else
-				%seriesname = %each
-			endif
-			logmsg %seriesname 
-			copy {%newpage}\{%each} {%original_page}\{%seriesname}			
-		next
-	endif
+	'--- Delete the forecast series ---'
+	for %each {%forecasts}			
+		wfselect {%wf}\{%original_page}
+		if @isobject(%each) then
+			%seriesname = @getnextname(%each+"_")
+		else
+			%seriesname = %each
+		endif
+		logmsg %seriesname 
+		copy {%newpage}\{%each} {%original_page}\{%seriesname}			
+	next
+
 	wfselect {%wf}\{%newpage}
 	pagedelete {%newpage}
 

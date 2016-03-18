@@ -49,17 +49,15 @@ endif
 
 'Set up the GUI
 if !dogui = 1 then
-	!keep_fcst = 0
 	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
 	
 	'Initialize with reasonable values
 	%holdout = "0.10" 'default to testing over 10% of the training range
 	%fullsample = %pagerange '%training_range
 	%err_measures = "MAE"
-	!keep_fcst = 0
 			
 	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
-		"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_fcst, "Keep the forecast series objects?" )	
+		"list", %err_measures, "Preferred error measure", %error_types)	
 	
 	'--- Stop the program if the users Xs out of the GUI ---'
 	if !result = -1 then 'will stop the program unless OK is selected in GUI
@@ -81,7 +79,6 @@ if !dogui =0 then 'extract options passed through the program or use defaults if
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
 	%err_measures = @equaloption("ERR") 
-	!keep_fcst = @val(@equaloption("K"))
 endif
 
 '--- Create a new page to work one ---'
@@ -354,7 +351,7 @@ next 'done looping over error measures
 
 	wfselect {%wf}\{%pagename} 
 
-if !keep_fcst = 1 then
+	'--- Delete forecast series ---'
 	for %each {%forecastseries}
 		if @isobject(%each) then
 			%seriesname = @getnextname(%each+"_")
@@ -363,7 +360,7 @@ if !keep_fcst = 1 then
 		endif	
 		copy {%newpage}\{%each} {%original_page}\{%seriesname}
 	next
-endif
+
 
 pagedelete {%newpage}
 

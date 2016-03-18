@@ -38,7 +38,7 @@ endif
 logmsg Getting Environment Info
 %freq = @pagefreq 'page frequency
 %pagesmpl = @pagesmpl
-%pagename = @pagename
+%original_page = @pagename
 %pagerange = @pagerange
 %wf = @wfname
 %var = _this.@name 'get the name of whatever object we're using this on
@@ -83,16 +83,15 @@ endif
 
 'Create new page for subsequent work
 !counter=1
-while @pageexist(%pagename+@str(!counter))
+while @pageexist(%original_page+@str(!counter))
 	!counter=!counter+1
 wend
 
-%newpage = %pagename+@str(!counter)
-
-pagecreate(page={%newpage}) {%freq} {%pagesmpl}
+%newpage = %original_page+@str(!counter)
+pagecreate(page={%newpage}) {%freq} {%pagerange}
 
 'copy relevant information
-wfselect {%wf}\{%pagename}
+wfselect {%wf}\{%original_page}
 
 'Grab a bit of information from the equation
 %reggroup = @getnextname("g_")
@@ -132,8 +131,8 @@ endif
 smpl %pagesmpl
 
 ''copy all base series that are needed to the new page
-copy(g=d) {%pagename}\{%reggroup} {%newpage}\
-copy {%pagename}\{%var} {%newpage}\
+copy(g=d) {%original_page}\{%reggroup} {%newpage}\
+copy {%original_page}\{%var} {%newpage}\
 delete %reggroup
 delete %regmat
 
@@ -362,43 +361,40 @@ for %err {%err_measures} '1 table per error measure
 	endif
 	
 	wfselect {%wf}\{%newpage}
-	copy {%newpage}\v_{%new}_{%err} {%pagename}\{%errorvector}
+	copy {%newpage}\v_{%new}_{%err} {%original_page}\{%errorvector}
 	{%table}.setformat(R3C3:R{!row}C{!cols}) f.3 'only display three decimal places
 	next
 	{%table}.setlines(R2C1:R2C{!cols}) +b 'underline the header row
 	
-	wfselect {%wf}\{%pagename} 'copy the tables into the original page
+	wfselect {%wf}\{%original_page} 'copy the tables into the original page
 	if @isobject(%table) then
 		%resulttable = @getnextname(%table)	
 	else
 		%resulttable = %table	
 	endif	
-	copy {%newpage}\{%table} {%pagename}\{%resulttable}
+	copy {%newpage}\{%table} {%original_page}\{%resulttable}
 next
 
 	
 	if !keep_fcst = 1 then
 		for %each {%forecasts}			
-			wfselect {%wf}\{%pagename}
+			wfselect {%wf}\{%original_page}
 			if @isobject(%each) then
 				%seriesname = @getnextname(%each+"_")
 			else
 				%seriesname = %each
 			endif
 			logmsg %seriesname 
-			copy {%newpage}\{%each} {%pagename}\{%seriesname}			
+			copy {%newpage}\{%each} {%original_page}\{%seriesname}			
 		next
 	endif
 	wfselect {%wf}\{%newpage}
 	pagedelete {%newpage}
 
 'if this was run from the GUI (on one equation), show the table of results
-wfselect {%wf}\{%pagename}
+wfselect {%wf}\{%original_page}
 if !dogui=1 then
-		show {%table}
+	show {%table}
 endif
-
-'Program Complete
-logmsg Program is Complete
 
 

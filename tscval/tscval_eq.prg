@@ -1,4 +1,4 @@
-'Motivation: Perform rolling time-series cross validation.
+'Motivation: Perform rolling time-series cross validation of an euqation
 
 'Description: 
 ' 	Program which takes an equation, rolls the sample, keeps producing forecasts,
@@ -10,8 +10,6 @@
 '##############################################################################
 setmaxerrs 1
 mode quiet
-
-'NOTE: Currently only supports equation objects (no VARs)
 		
 !debug = 0 'set to 1 if you want the logmsgs to display
 
@@ -24,30 +22,23 @@ endif
 '--- Check that we are on a time series page ---'
 if @pagefreq = "u" or @ispanel then
 	seterr "Procedure must be run on a time-series page."
-	stop
 endif
 
 '--- Check the version ---'
 if @vernum < 9 then
 	seterr "EViews version 9.0 or higher is required to run this add-in."
-	stop
 endif
 
 'STEP 1: Figure out if the add-in is run through GUI or programmatically
 !dogui=0
-
-logmsg Looking for Program Options
 if not @hasoption("PROC") then
-	'this is run through GUI
-	logmsg This is run through GUI
-	!dogui=1
+	!dogui=1 'if this is 1, we are running through the GUI
 endif
 
 '--- Environment Info ---'
-logmsg Getting Environment Info
 %freq = @pagefreq 'page frequency
 %pagesmpl = @pagesmpl
-%pagename = @pagename
+%original_page = @pagename
 %pagerange = @pagerange
 %wf = @wfname
 %eq = _this.@name 'get the name of whatever object we're using this on
@@ -55,10 +46,12 @@ logmsg Getting Environment Info
 
 'If the add-in is invoked through GUI, !result below will be changed to something else
 !result=0
+
 'Set up the GUI
 if !dogui = 1 then
 	!keep_fcst = 0
 	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
+	
 	'Initialize with reasonable values
 	%holdout = "0.10" 'default to testing over 10% of the training range
 	%fullsample = %pagerange '%training_range
@@ -67,6 +60,12 @@ if !dogui = 1 then
 			
 	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
 		"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_fcst, "Keep the forecast series objects?" )	
+	
+	'--- Stop the program if the users Xs out of the GUI ---'
+	if !result = -1 then 'will stop the program unless OK is selected in GUI
+		stop
+	endif
+	
 	'Map human-readable values to params
 	if %err_measures = "Correct sign (count)" then
 		%err_measures = "SIGN"
@@ -77,12 +76,7 @@ if !dogui = 1 then
 	!holdout = @val(%holdout)	
 endif
 
-'choose dialog outcomes
-if !result = -1 then 'will stop the program unless OK is selected in GUI
-	logmsg CANCELLED
-	STOP
-endif
-
+'--- Grab program options if not running from the GUI ---'
 if !dogui =0 then 'extract options passed through the program or use defaults if nothing is passed
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
@@ -90,18 +84,16 @@ if !dogui =0 then 'extract options passed through the program or use defaults if
 	!keep_fcst = @val(@equaloption("K"))
 endif
 
-'Create new page for subsequent work
+'--- Create a new page to work one ---'
 !counter=1
-while @pageexist(%pagename+@str(!counter))
+while @pageexist(%original_page+@str(!counter))
 	!counter=!counter+1
 wend
-
-%newpage = %pagename+@str(!counter)
-
-pagecreate(page={%newpage}) {%freq} {%pagesmpl}
+%newpage = %original_page+@str(!counter)
+pagecreate(page={%newpage}) {%freq} {%pagerange}
 
 'copy relevant information
-wfselect {%wf}\{%pagename}
+wfselect {%wf}\{%original_page}
 
 'Grab a bit of information from the equation
 %reggroup = @getnextname("g_")
@@ -135,8 +127,8 @@ delete {%regmat} {%reggroup}
 group {%reggroup} {%regvars}
 
 'copy all base series that are needed to the new page
-copy(g=d) {%pagename}\{%reggroup} {%newpage}\
-copy {%pagename}\{%eq} {%newpage}\
+copy(g=d) {%original_page}\{%reggroup} {%newpage}\
+copy {%original_page}\{%eq} {%newpage}\
 delete %reggroup
 
 'move to the new page
@@ -340,7 +332,7 @@ for %err {%err_measures} '1 table per error measure
 	next
 	
 	'Copy over to the main page, make sure we don't overwrite existing objects
-	wfselect {%wf}\{%pagename}
+	wfselect {%wf}\{%original_page}
 	if @isobject(%table) then
 		%resulttable = @getnextname(%table)
 	else
@@ -353,8 +345,8 @@ for %err {%err_measures} '1 table per error measure
 		%errorvector = 	"v_"+%eq+"_"+%err
 	endif	
 	
-	copy {%newpage}\{%table} {%pagename}\{%resulttable}
-	copy {%newpage}\v_{%eq}_{%err} {%pagename}\{%errorvector}
+	copy {%newpage}\{%table} {%original_page}\{%resulttable}
+	copy {%newpage}\v_{%eq}_{%err} {%original_page}\{%errorvector}
 	
 	'be sure to select back to the temporary page
 	wfselect {%wf}\{%newpage} 
@@ -369,20 +361,17 @@ if !keep_fcst = 1 then
 		else 
 			%seriesname = %each
 		endif	
-		copy {%newpage}\{%each} {%pagename}\{%seriesname}
+		copy {%newpage}\{%each} {%original_page}\{%seriesname}
 	next
 endif
 
 pagedelete {%newpage}
 
 'if this was run from the GUI (on one equation), show the table of results
-wfselect {%wf}\{%pagename}
+wfselect {%wf}\{%original_page}
 if !dogui=1 then
 	show {%resulttable}
 endif
-
-'Program Complete
-logmsg Program is Complete
 
 '##################################################################################
 

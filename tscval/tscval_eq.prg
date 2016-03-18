@@ -1,4 +1,4 @@
-'Motivation: Perform rolling time-series cross validation of an euqation
+'Motivation: Perform rolling time-series cross validation of an equation
 
 'Description: 
 ' 	Program which takes an equation, rolls the sample, keeps producing forecasts,
@@ -10,13 +10,13 @@
 '##############################################################################
 setmaxerrs 1
 mode quiet
-		
-!debug = 0 'set to 1 if you want the logmsgs to display
 
+'--- Set the log mode ---'		
+!debug = 1 'set to 1 if you want the logmsgs to display
 if !debug = 0 then
 	logmode +addin
 else
-	logmsg 'pop up the log
+	logmode logmsg
 endif
 
 '--- Check that we are on a time series page ---'
@@ -29,12 +29,6 @@ if @vernum < 9 then
 	seterr "EViews version 9.0 or higher is required to run this add-in."
 endif
 
-'STEP 1: Figure out if the add-in is run through GUI or programmatically
-!dogui=0
-if not @hasoption("PROC") then
-	!dogui=1 'if this is 1, we are running through the GUI
-endif
-
 '--- Environment Info ---'
 %freq = @pagefreq 'page frequency
 %pagesmpl = @pagesmpl
@@ -43,6 +37,14 @@ endif
 %wf = @wfname
 %eq = _this.@name 'get the name of whatever object we're using this on
 %command = {%eq}.@command 'command to re-estimate (with all the same options) 
+
+'--- Get Arguments (GUI or programmatic) ---'
+
+'Was this run from the GUI?
+!dogui=0
+if not @hasoption("PROC") then
+	!dogui=1 'if this is 1, we are running through the GUI
+endif
 
 'If the add-in is invoked through GUI, !result below will be changed to something else
 !result=0
@@ -81,33 +83,24 @@ if !dogui =0 then 'extract options passed through the program or use defaults if
 	%err_measures = @equaloption("ERR") 
 endif
 
-'--- Create a new page to work one ---'
-!counter=1
-while @pageexist(%original_page+@str(!counter))
-	!counter=!counter+1
-wend
-%newpage = %original_page+@str(!counter)
-pagecreate(page={%newpage}) {%freq} {%pagerange}
-
-'copy relevant information
+'--- Get some information from the equation object ---'
 wfselect {%wf}\{%original_page}
+%group = @getnextname("g_")
+{%eq}.makeregs {%group}
+%vars = @wunique({%group}.@depends)
+%depvar = @word({%group}.@depends,1) 'dependent variable without transformations
 
-'Grab a bit of information from the equation
-%reggroup = @getnextname("g_")
-%regmat = @getnextname("mat_")
-{%eq}.makeregs {%reggroup}
-%regvars = @wunique({%reggroup}.@depends)
-%depvar = @word({%reggroup}.@depends,1) 'dependent variable without transformations
+'--- Adjust the training range (%fullsample) if necessary ---'
 
-'Re-work the training range if needed
+'Figure out the bounds of the estimable sample (assumes continuous series)
+%mat = @getnextname("m_")
 smpl @all
-stomna({%reggroup}, {%regmat}) 'the matrix will help find earliers and latest data to figure out appropriate data sample
+	stomna({%group}, {%mat}) 'the matrix will help find earliest and latest data to figure out appropriate data sample
+smpl @all
+%earliest = @otod(@max(@cifirst({%mat})))
+%latest = @otod(@min(@cilast({%mat})))
 
-'Figure out the bounds of the data that can be estimated over
-%earliest = @otod(@max(@cifirst({%regmat})))
-%latest = @otod(@min(@cilast({%regmat})))
-
-'If training range interval is wider than available range interval, replace declared training range with available data range
+'If the user set %fullsample to a range wider than what is actually estimable, shrink %fullsample to what is possible
 if @dtoo(%earliest) > @dtoo(@word(%fullsample,1)) then
 	%fullsample = @replace(%fullsample, @word(%fullsample,1), %earliest)
 endif
@@ -116,158 +109,133 @@ if @dtoo(%latest) < @dtoo(@word(%fullsample,2)) then
 	%fullsample = @replace(%fullsample, @word(%fullsample,2), %latest)
 endif
 
-'reset the sample back to what it was	
+'Clean up the intermediate stuff from this calculation
+delete {%mat} {%group}
+
+'--- Create a temporary page and copy relevant stuff to it ---'
+
+'Create the page
+!i=1
+while @pageexist(%original_page+@str(!i))
+	!i=!i+1
+wend
+%newpage = %original_page+@str(!i)
+pagecreate(page={%newpage}) {%freq} {%pagerange}
+
+'Copy stuff to it
+wfselect {%wf}\{%original_page}
+%group = @getnextname("g_")
+group {%group} {%vars}
+string varvar = %vars
+copy(g=d) {%original_page}\{%group} {%newpage}\
+copy {%original_page}\{%eq} {%newpage}\{%eq}
+
+'--- Clean up behind ourselves on the original page, move on to the new one ---'
+wfselect {%wf}\{%original_page}
 smpl %pagesmpl
-delete {%regmat} {%reggroup}
-
-%reggroup = @getnextname("g_")
-group {%reggroup} {%regvars}
-
-'copy all base series that are needed to the new page
-copy(g=d) {%original_page}\{%reggroup} {%newpage}\
-copy {%original_page}\{%eq} {%newpage}\
-delete %reggroup
-
-'move to the new page
+delete {%group}
 wfselect {%wf}\{%newpage}
 
-'STEP 1: Cut Sample into Training and Testing Ranges
-'count # of obs in the training set
-logmsg STEP 1: Checking/Modifying Samples - Cut Sample into Training and Testing Ranges
-!trainobscount  = @round((@dtoo(@word(%fullsample,2))-@dtoo(@word(%fullsample,1)))*(1-!holdout))
-'%shorttrainend = @otod(!trainobscount+@dtoo(%earliest)) 'this is the end of the training sample
-%shorttrainend = @otod(!trainobscount+@dtoo(@word(%fullsample,1))) 'this is the end of the training sample
-%longfcststart = @otod(@dtoo(%shorttrainend)+1)'where longest forecast begins
-!toteqs = @dtoo(@word(%fullsample,2))-@dtoo(%shorttrainend) 'total numbers of estimations
+'--- Figure out where to begin estimation ---'
+!obs = @round((@dtoo(@word(%fullsample,2))-@dtoo(@word(%fullsample,1)))*(1-!holdout)) 'how many observations in the first estimation sample?
+%start_first_est = @word(%fullsample,1) 'start of first estimation sample
+%end_first_est = @otod(@dtoo(%start_first_est)+!obs) 'end of first estimation sample
+%first_fcst_start = @otod(@dtoo(%end_first_est)+1) 'start of the very first forecast we prepare
+%fcst_end = @word(%fullsample,2)
+!toteqs =  @dtoo(%fcst_end)-@dtoo(%end_first_est) 'how many equations will be estimated?
 
-'STEP 2: Running Estimates
-logmsg STEP 2: Running Estimates
-'Name Lists that Need to Be Populated
+'--- Rolling estimates and forecasts ---'
 
-%forecasts = "" 'list of forecasts
-%v_err = "" 'traditional level errors (yhat-y)
-%v_err_pc = "" 'percentage errors
-%v_err_sgn = "" 'sign errors (direction of change
-%v_err_sym = "" 'scaled symmetric errors for sMAPE
-
-%vectornamelists = "v_err v_err_pc v_err_sgn v_err_sym" 'list of vector namelists
-
-%forecastseries = ""
-
-for !i = 0 to !toteqs-1	
-	'Date Strings
-	%trainend = @otod(@dtoo(%shorttrainend)+!i) 'end of the training sample (incremented by 1 in each loop step)
-	%trainstart = @word(%fullsample,1) 'beginning of the training sample
-	%fcststart = @otod(@dtoo(%trainend)+1) 'forecasting begins after training sample ends
-	%fcstend = @word(%fullsample,2) 'end of the forecast
-	
-	'Estimate the model over this sample
-	'logmsg %trainstart %trainend
-	smpl %trainstart %trainend
-	{%eq}.{%command} 're-estimate the equation
-	
-	'Forecast the model over this sample
-	smpl %fcststart %fcstend
-	{%eq}.forecast(f=actual) {%depvar}_f_{%fcststart} 'create forecasts
-	%forecastseries  = %forecastseries + %depvar+"_f_"+%fcststart+" " 'list of all forecasted series
-	'*****Calculate Errors
-		'ERROR 1: Absolute Errors
-		smpl @all
-		series ERR_{%fcststart} ={%depvar} - {%depvar}_f_{%fcststart}
-		if @isobject("smpl") then
-			delete smpl
-		endif
-		sample smpl %longfcststart %fcstend
-		vector V_ERR_{%fcststart} = @convert(ERR_{%fcststart}, smpl) 'convert to vector
-		%v_err = %v_err + "V_ERR_"+ %fcststart + " " 'populate vector namelist
-		
-		'ERROR 2: Percentage Errors
-		smpl @all
-		series ERR_PC_{%fcststart} = (({%depvar} - {%depvar}_f_{%fcststart})/{%depvar})*100
-		if @isobject("smpl") then
-			delete smpl
-		endif	
-		sample smpl %longfcststart %fcstend	
-		vector V_ERR_PC_{%fcststart} = @convert(ERR_PC_{%fcststart}, smpl)
-		%v_err_pc = %v_err_pc + "V_ERR_PC_"+%fcststart+" " 'populate vector namelist
-		
-		'ERROR 3: Sign Erors (should be over the horizon. So 2 step ahead asks: "Did we correctly predict the direction of change between two periods ago and today?")
-		smpl @all
-		!last_hist_point = @elem({%depvar}, %trainend) 'grab the last value from history
-		
-		'get a series of actual changesi n the history
-		series changes = {%depvar} - @elem({%depvar}, %trainend)
-		changes = @recode(changes=0, 1e-08, changes) 'recode 0s to small positives (treat 0 as positive)
-		
-		'if change in fcst and change in actual are in the same direction, the sign was correct
-		series ERR_SGN_{%fcststart} = (({%depvar}_f_{%fcststart} -  !last_hist_point) / changes) > 0 '1 if correct sign, 0 otherwise
-		if @isobject("smpl") then
-			delete smpl
-		endif	
-		sample smpl %longfcststart %fcstend	
-		vector V_ERR_SGN_{%fcststart} = @convert(ERR_SGN_{%fcststart}, smpl)
-		%v_err_sgn = %v_err_sgn + "V_ERR_SGN_" + %fcststart + " " 'populate sign vector namelist
-		
-		'ERROR 4: Sums for sMAPE (see http://robjhyndman.com/hyndsight/smape/)
-		smpl @all
-		series ERR_SYM_{%fcststart} = 2*@abs({%depvar} - {%depvar}_f_{%fcststart})/(@abs({%depvar}) + @abs({%depvar}_f_{%fcststart}))
-		if @isobject("smpl") then
-			delete smpl
-		endif	
-		sample smpl %longfcststart %fcstend	
-		vector V_ERR_SYM_{%fcststart} = @convert(ERR_SYM_{%fcststart}, smpl)
-		%v_err_sym = %v_err_sym + "V_ERR_SYM_" + %fcststart + " " 'populate symmetric error vector namelist
-		
-	'*****		
-	%forecasts = %forecasts + %depvar+"_f_"+%fcststart+" " 'creating a list of all series that are forecasted
-	smpl @all
+'create (empty) group objects to store the error series
+for %type lev pc sgn sym
+	group g_{%type}
 next
 
-'STEP 3: Create Vectors with N-Step Ahead Error
-logmsg STEP 3: Create Vectors with N-Step Ahead Error
+'initialize
+%start_est = @word(%fullsample,1)
+%end_fcst = @word(%fullsample,2)
+for !i = 0 to (!toteqs-1)
+	
+	'Date strings
+	%end_est = @otod(@dtoo(%end_first_est) + !i)
+	%start_fcst = @otod(@dtoo(%end_est)+1)
+	
+	'Estimate over this sample
+	smpl {%start_est} {%end_est}
+		{%eq}.{%command}
+		
+	'Forecast
+	smpl {%start_fcst} {%end_fcst}
+		%fcst = @getnextname("fcst")
+		{%eq}.forecast(f=na) {%fcst} '(f=na) --> NAs over history...series are forecast-only
+		
+	'calculate series of errors and add them to the correct group object
+	smpl @all
+	
+		'--- 1. Level Errors ---'
+		%f = @getnextname(%fcst+"_lev")									
+		series {%f} = {%depvar} - {%fcst}
+		g_lev.add {%f}
+		
+		'--- 2. Percentage Errors ---'
+		%f = @getnextname(%fcst+"_pc")
+		series {%f} = 100*({%depvar}-{%fcst})/{%depvar}
+		g_pc.add {%f}
+		
+		'--- 3. Sign errors ---'
+		'intuition--> "Did we correctly predict the direction of change between n periods ago and today?"
+		
+		!last_hist_point = @elem({%depvar}, %end_est) 'grab the last value from history
+		series changes = {%depvar} - !last_hist_point
+			changes = @recode(changes=0, 1e-08, changes) 'recode 0s to small positives (treat 0 as positive)
+		
+		%f = @getnextname(%fcst+"_sgn")
+		series {%f} = (({%fcst}-!last_hist_point)/changes) > 0 '1 if correct sign, 0 other wise
+		g_sgn.add {%f}	
+		
+		'--- 4. Sums for SMAPE (see http://robjhyndman.com/hyndsight/smape/) ---'
+		%f = @getnextname(%fcst+"_sym")
+		series {%f} = 2*@abs({%depvar} - {%fcst})/(@abs({%depvar}) + @abs({%fcst}))
+		g_sym.add {%f}
+		
+	smpl @all
+	
+	'clean up
+	delete {%fcst} changes
+		
+next
 
-for %list {%vectornamelists}
-	if @isobject("m_matrix") then
-		delete m_matrix
-	endif
+'--- Create vectors with the n-step-ahead errors ---'
+for %type lev pc sgn sym
 	
-	matrix(!toteqs, !toteqs) m_matrix
-
-	'Create Vectors with N-Step Ahead Error
-	
-	'Assemble the vectors in a matrix
-	for %each {%{%list}}
-		!count = @wfind(%{%list}, %each)
-		colplace(m_matrix, {%each}, !count)
-	next
-	
-	'Go through and grab each vector (1-period ahead is on the main diagonal of the full matrix)
+	'Convert group of errors to matrix
+	smpl {%first_fcst_start} {%fcst_end}
+		stomna(g_{%type},m_{%type})
+		
+	'Grab n-step-ahead error vectors from the matrix
 	!horizon = 1
 	while 1
-		if @rows(m_matrix) > 1 then
+		if @rows(m_{%type}) > 1 then
 			'grab the forecast
-			vector e_{%list}_{!horizon} = m_matrix.@diag
+			vector v_{%type}_{!horizon} = m_{%type}.@diag
 			
-			'the matrix is upper traingular...remove row 1 and the last column
-			!cols = @columns(m_matrix)
-			m_matrix = m_matrix.@dropcol(!cols)
-			m_matrix = m_matrix.@droprow(1)
+			'the matrix is lower triangular...remove row 1 and the last column
+			!cols = @columns(m_{%type})
+			m_{%type} = m_{%type}.@dropcol(!cols)
+			m_{%type} = m_{%type}.@droprow(1)
 			
 			'increment the horizon
 			!horizon = !horizon + 1
 		else
 			'grab the last (longest) forecast
-			vector e_{%list}_{!horizon} = m_matrix.@diag
-			
+			vector v_{%type}_{!horizon} = m_{%type}.@diag
+			delete m_{%type}
 			exitloop 'we're done here
 		endif
 	wend
-	
 next
 
-'STEP 4: Creating the Forecast Evaluation Table
-logmsg STEP4: Creating the Forecast Evaluation Table(s)
-
+'--- Create the table & vector objects with output ---'
 for %err {%err_measures} '1 table per error measure
 
 	%table = "T_"+ %eq +"_" + %err
@@ -280,37 +248,36 @@ for %err {%err_measures} '1 table per error measure
 	{%table}(4,1) = %eq
 	{%table}(4,2) = %err + ":"
 	
-	!indent = 2 'two columns of metadata in column 1 (equation name, row labels)
-	
-	vector(!toteqs) V_{%eq}_{%err}
+	vector(!toteqs) V_{%eq}_{%err} 'vector object mirroring the table (for convenience)
 	
 	'fill in the table with error measures
+	!indent = 2 'two columns of metadata in column 1 (equation name, row labels)
 	for !col=1 to !toteqs
 		%head = @str(!col)
 		{%table}(2, !col+!indent) = %head
 		
 		%horizon = @str(!col)
 		'Absolute Errors
-		!MAE  = @mean(@abs(e_v_err_{%horizon}))
-		!MSE = @mean(@epow(e_v_err_{%horizon},2))
+		!MAE  = @mean(@abs(v_lev_{%horizon}))
+		!MSE = @mean(@epow(v_lev_{%horizon},2))
 		!MSFE = !MSE 'some people use different terms
 		!RMSE = @sqrt(!MSE)
-		!medAE = @median(@abs(e_v_err_{%horizon}))
+		!medAE = @median(@abs(v_lev_{%horizon}))
 		
 		'Percentage Errors
-		!MAPE = @mean(@abs(e_v_err_pc_{%horizon}))
-		!MPE = @mean(e_v_err_pc_{%horizon})
-		!MSPE = @mean(@epow(e_v_err_pc_{%horizon},2))
+		!MAPE = @mean(@abs(v_pc_{%horizon}))
+		!MPE = @mean(v_pc_{%horizon})
+		!MSPE = @mean(@epow(v_pc_{%horizon},2))
 		!RMSPE = @sqrt(!MSPE)
-		!SMAPE = @mean(e_v_err_sym_{%horizon})
-		!medPE = @med(@abs(e_v_err_pc_{%horizon}))
+		!medPE = @med(@abs(v_pc_{%horizon}))
+		!SMAPE = @mean(v_sym_{%horizon})
 		
 		'Sign errors
-		!SIGN = @sum(e_v_err_sgn_{%horizon})
-		!SIGNP = 100*(!SIGN/@obs(e_v_err_sgn_{%horizon}))
+		!SIGN = @sum(v_sgn_{%horizon})
+		!SIGNP = 100*(!SIGN/@obs(v_sgn_{%horizon}))
 		
 		'How many forecasts did we have at this horizon?
-		!obs = @obs(e_v_err_{%horizon})
+		!obs = @obs(v_lev_{%horizon})
 		{%table}(3, !col+!indent) = @str(!obs)
 		
 		'STEP 5: Creaing a Single Vector of Errors
@@ -346,26 +313,15 @@ for %err {%err_measures} '1 table per error measure
 	copy {%newpage}\v_{%eq}_{%err} {%original_page}\{%errorvector}
 	
 	'be sure to select back to the temporary page
-	wfselect {%wf}\{%newpage} 
+	wfselect {%wf}\{%newpage}
+	 
 next 'done looping over error measures
 
-	wfselect {%wf}\{%pagename} 
-
-	'--- Delete forecast series ---'
-	for %each {%forecastseries}
-		if @isobject(%each) then
-			%seriesname = @getnextname(%each+"_")
-		else 
-			%seriesname = %each
-		endif	
-		copy {%newpage}\{%each} {%original_page}\{%seriesname}
-	next
-
-
+'--- Delete the temporary page ---'
 pagedelete {%newpage}
-
-'if this was run from the GUI (on one equation), show the table of results
 wfselect {%wf}\{%original_page}
+
+'--- Show the table if we ran from the GUI ---'
 if !dogui=1 then
 	show {%resulttable}
 endif

@@ -1,41 +1,36 @@
+'Motivation: Perform rolling time-series cross validation of a VAR object.
+
+'Description: 
+' 	Program which takes a VAR object, rolls the sample, keeps producing forecasts,
+' 	then stacks up vectors by horizon and computes errors at different horizons and for different error types
+' 	Returns a few objects in the wf:
+'		1. T_ACC_{%err} --> a table with the var name and error (see below) by forecast horizon | e.g. t_acc_mape
+'		2. V_{%err} --> a vector for the given VAR, where element 1 is 1-step-ahead, elem 2 is 2-step, etc. | e.g. "v_mape"
+
+'##############################################################################
 setmaxerrs 1
 mode quiet
-logmode logmsg
 		
+'--- Set the log mode ---'		
 !debug = 0 'set to 1 if you want the logmsgs to display
-
 if !debug = 0 then
 	logmode +addin
 else
-	logmsg 'pop up the log
+	logmode logmsg
+	logmsg
 endif
-
-logmsg Running PROC on VAR
 
 '--- Check that we are on a time series page ---'
 if @pagefreq = "u" or @ispanel then
 	seterr "Procedure must be run on a time-series page."
-	stop
 endif
 
 '--- Check the version ---'
 if @vernum < 9 then
 	seterr "EViews version 9.0 or higher is required to run this add-in."
-	stop
-endif
-
-'STEP 1: Figure out if the add-in is run through GUI or programmatically
-!dogui=0
-
-logmsg Looking for Program Options
-if not @hasoption("PROC") then
-	'this is run through GUI
-	logmsg This is run through GUI
-	!dogui=1
 endif
 
 '--- Environment Info ---'
-logmsg Getting Environment Info
 %freq = @pagefreq 'page frequency
 %pagesmpl = @pagesmpl
 %original_page = @pagename
@@ -44,19 +39,34 @@ logmsg Getting Environment Info
 %var = _this.@name 'get the name of whatever object we're using this on
 %command = {%var}.@command 'command to re-estimate (with all the same options) 
 
+'--- Get Arguments (GUI or programmatic) ---'
+
+'Was this run from the GUI?
+!dogui=0
+if not @hasoption("PROC") then
+	!dogui=1 'if this is 1, we are running through the GUI
+endif
+
 'If the add-in is invoked through GUI, !result below will be changed to something else
 !result=0
+
 'Set up the GUI
 if !dogui = 1 then
-	
 	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
+	
 	'Initialize with reasonable values
 	%holdout = "0.10" 'default to testing over 10% of the training range
 	%fullsample = %pagerange '%training_range
 	%err_measures = "MAE"
 			
 	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
-		"list", %err_measures, "Preferred error measure", %error_types)	
+		"list", %err_measures, "Preferred error measure", %error_types)
+		
+	'--- Stop the program if the users Xs out of the GUI ---'
+	if !result = -1 then 'will stop the program unless OK is selected in GUI
+		stop
+	endif	
+	
 	'Map human-readable values to params
 	if %err_measures = "Correct sign (count)" then
 		%err_measures = "SIGN"
@@ -67,31 +77,25 @@ if !dogui = 1 then
 	!holdout = @val(%holdout)	
 endif
 
-'choose dialog outcomes
-if !result = -1 then 'will stop the program unless OK is selected in GUI
-	logmsg CANCELLED
-	STOP
-endif
-
+'--- Grab program options if not running from the GUI ---'
 if !dogui =0 then 'extract options passed through the program or use defaults if nothing is passed
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
-	%err_measures = @equaloption("ERR")
+	%err_measures = @equaloption("ERR") 
 endif
 
-'Create new page for subsequent work
-!counter=1
-while @pageexist(%original_page+@str(!counter))
-	!counter=!counter+1
+'--- Create a new page to work on ---'
+!i=1
+while @pageexist(%original_page+@str(!i))
+	!i=!i+1
 wend
-
-%newpage = %original_page+@str(!counter)
+%newpage = %original_page+@str(!i)
 pagecreate(page={%newpage}) {%freq} {%pagerange}
 
 'copy relevant information
 wfselect {%wf}\{%original_page}
 
-'Grab a bit of information from the equation
+'Grab a bit of information from the VAR
 %reggroup = @getnextname("g_")
 %regmat = @getnextname("mat_")
 %varmodel = @getnextname("m_model_")

@@ -1,8 +1,8 @@
 <item>
 <title>tscval</title>
 <path>tscvalproc.prg</path>
-<version>0.5</version>
+<version>0.9</version>
 <description>Performs time-series cross-validation (rolling out-of-sample forecast evaluation) of equation and VAR objects.</description>
-<link>https://github.com/jameslamb/ML4EVIEWS/tree/master/Installers/tscval.aipz</link>
-<pubDate>12 Feb 2016</pubDate>
+<link>http://github.com/jameslamb/ML4EVIEWS/tree/master/Installers/tscval.aipz</link>
+<pubDate>19 Mar 2016</pubDate>
 </item>

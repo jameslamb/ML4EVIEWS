@@ -1,4 +1,4 @@
-## cval()
+## tscval()
 
 This sub-directory holds files for an EViews add-in which implements time-series cross-validation.
 

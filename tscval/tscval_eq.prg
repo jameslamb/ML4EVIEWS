@@ -4,7 +4,7 @@
 ' 	Program which takes an equation, rolls the sample, keeps producing forecasts,
 ' 	then stacks up vectors by horizon and computes errors at different horizons and for different error types
 ' 	Returns a few objects in the wf:
-'		1. T_ACC_{%err} --> a table with the eq name and error (see below) by forecast horizon | e.g. t_acc_mape
+'		1. T_CV_{%err} --> a table with the eq name and error (see below) by forecast horizon | e.g. t_acc_mape
 '		2. V_{%err} --> a vector for the given equation, where element 1 is 1-step-ahead, elem 2 is 2-step, etc. | e.g. "v_mape"
 
 '##############################################################################
@@ -126,7 +126,6 @@ pagecreate(page={%newpage}) {%freq} {%pagerange}
 wfselect {%wf}\{%original_page}
 %group = @getnextname("g_")
 group {%group} {%vars}
-string varvar = %vars
 copy(g=d) {%original_page}\{%group} {%newpage}\
 copy {%original_page}\{%eq} {%newpage}\{%eq}
 
@@ -238,23 +237,26 @@ next
 '--- Create the table & vector objects with output ---'
 for %err {%err_measures} '1 table per error measure
 
-	%table = "T_"+ %eq +"_" + %err
+	%table = "T_CV_" + %err
 	table {%table}
 	
+	{%table}(1,1) = "SERIES"
+	{%table}(2,1) = %depvar
+	{%table}(3,1) = %depvar
+	{%table}(1,2) = "Estimation_Object"
+	{%table}(2,2) = %eq
+	{%table}(3,2) = %eq
 	{%table}(1,3) = "STEPS AHEAD ==>"
-	{%table}(2,1) = "EQUATION"
-	{%table}(3,1) = %eq
-	{%table}(3,2) = "FORECASTS:"
-	{%table}(4,1) = %eq
-	{%table}(4,2) = %err + ":"
+	{%table}(2,3) = "FORECASTS:"
+	{%table}(3,3) = %err + ":"
 	
-	vector(!toteqs) V_{%eq}_{%err} 'vector object mirroring the table (for convenience)
+	vector(!toteqs) v_cv_{%err} 'vector object mirroring the table (for convenience)
 	
 	'fill in the table with error measures
-	!indent = 2 'two columns of metadata in column 1 (equation name, row labels)
+	!indent = 3 'two columns of metadata in column 1 (equation name, row labels)
 	for !col=1 to !toteqs
 		%head = @str(!col)
-		{%table}(2, !col+!indent) = %head
+		{%table}(1, !col+!indent) = %head
 		
 		%horizon = @str(!col)
 		'Absolute Errors
@@ -278,22 +280,27 @@ for %err {%err_measures} '1 table per error measure
 		
 		'How many forecasts did we have at this horizon?
 		!obs = @obs(v_lev_{%horizon})
-		{%table}(3, !col+!indent) = @str(!obs)
+		{%table}(2, !col+!indent) = @str(!obs)
 		
 		'STEP 5: Creaing a Single Vector of Errors
 		'How good was the forecast at this horizon?
-		v_{%eq}_{%err}(!col) = !{%err}	
-		{%table}(4, !col+!indent) = !{%err}	
+		v_cv_{%err}(!col) = !{%err}	
+		{%table}(3, !col+!indent) = !{%err}	
 	next
 	
+	'Format the table
+	!rows = @rows({%table})
 	!cols = @columns({%table})
-	{%table}.setformat(R3C3:R4C{!cols}) f.3 'only display three decimal places
-	{%table}.setlines(R2C1:R2C{!cols}) +b 'underline the header row
+	{%table}.setformat(R2C4:R{!rows}C{!cols}) f.3 'only display three decimal places
+	{%table}.setlines(R1C1:R1C{!cols}) +b 'underline the header row
+	{%table}.setwidth(2) 16.8 'resize column 2 to fit text
+	{%table}.setwidth(3) 15.1 'resize column 1 to fit text
 	
 	'tag these objects with the equation name
-	for %object {%table} v_{%eq}_{%err}
-		{%object}.setattr(Source_Equation) {%eq}
+	for %object {%table} v_cv_{%err}
+		{%object}.setattr(Estimation_Object) {%eq}
 	next
+	v_cv_{%err}.setattr(Series) {%depvar} 'series the errors pertain to
 	
 	'Copy over to the main page, make sure we don't overwrite existing objects
 	wfselect {%wf}\{%original_page}
@@ -303,14 +310,14 @@ for %err {%err_measures} '1 table per error measure
 		%resulttable = %table
 	endif	
 	
-	if @isobject("v_"+%eq+"_"+%err) then
-		%errorvector = @getnextname("v_"+%eq+"_"+%err)
+	if @isobject("v_cv_"+%err) then
+		%errorvector = @getnextname("v_cv"_"+%err)
 	else
-		%errorvector = 	"v_"+%eq+"_"+%err
+		%errorvector = 	"v_cv_"+%err
 	endif	
 	
 	copy {%newpage}\{%table} {%original_page}\{%resulttable}
-	copy {%newpage}\v_{%eq}_{%err} {%original_page}\{%errorvector}
+	copy {%newpage}\v_cv_{%err} {%original_page}\{%errorvector}
 	
 	'be sure to select back to the temporary page
 	wfselect {%wf}\{%newpage}

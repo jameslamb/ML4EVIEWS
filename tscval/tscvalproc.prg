@@ -33,7 +33,7 @@
 		
 		'--- Case 2. VAR object ---'
 		if %type = "VAR" then
-			exec ".\tscval_var.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measure}, PROC)
+			exec ".\tscval_var.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measures}, PROC)
 			exitloop
 		endif
 		

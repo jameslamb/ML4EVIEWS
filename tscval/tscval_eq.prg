@@ -12,7 +12,7 @@ setmaxerrs 1
 mode quiet
 
 '--- Set the log mode ---'		
-!debug = 1 'set to 1 if you want the logmsgs to display
+!debug = 0 'set to 1 if you want the logmsgs to display
 if !debug = 0 then
 	logmode +addin
 else

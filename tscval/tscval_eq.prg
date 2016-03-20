@@ -311,7 +311,7 @@ for %err {%err_measures} '1 table per error measure
 	endif	
 	
 	if @isobject("v_cv_"+%err) then
-		%errorvector = @getnextname("v_cv"_"+%err)
+		%errorvector = @getnextname("v_cv_"+%err)
 	else
 		%errorvector = 	"v_cv_"+%err
 	endif	

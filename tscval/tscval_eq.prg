@@ -84,7 +84,7 @@ if !dogui =0 then 'extract options passed through the program or use defaults if
 endif
 
 '--- Get some information from the equation object ---'
-wfselect {%wf}\{%original_page}
+wfselect %wf\{%original_page}
 %group = @getnextname("g_")
 {%eq}.makeregs {%group}
 %vars = @wunique({%group}.@depends)
@@ -123,17 +123,17 @@ wend
 pagecreate(page={%newpage}) {%freq} {%pagerange}
 
 'Copy stuff to it
-wfselect {%wf}\{%original_page}
+wfselect %wf\{%original_page}
 %group = @getnextname("g_")
 group {%group} {%vars}
 copy(g=d) {%original_page}\{%group} {%newpage}\
 copy {%original_page}\{%eq} {%newpage}\{%eq}
 
 '--- Clean up behind ourselves on the original page, move on to the new one ---'
-wfselect {%wf}\{%original_page}
+wfselect %wf\{%original_page}
 smpl %pagesmpl
 delete {%group}
-wfselect {%wf}\{%newpage}
+wfselect %wf\{%newpage}
 
 '--- Figure out where to begin estimation ---'
 !obs = @round((@dtoo(@word(%fullsample,2))-@dtoo(@word(%fullsample,1)))*(1-!holdout)) 'how many observations in the first estimation sample?
@@ -303,7 +303,7 @@ for %err {%err_measures} '1 table per error measure
 	v_cv_{%err}.setattr(Series) {%depvar} 'series the errors pertain to
 	
 	'Copy over to the main page, make sure we don't overwrite existing objects
-	wfselect {%wf}\{%original_page}
+	wfselect %wf\{%original_page}
 	if @isobject(%table) then
 		%resulttable = @getnextname(%table)
 	else
@@ -320,13 +320,13 @@ for %err {%err_measures} '1 table per error measure
 	copy {%newpage}\v_cv_{%err} {%original_page}\{%errorvector}
 	
 	'be sure to select back to the temporary page
-	wfselect {%wf}\{%newpage}
+	wfselect %wf\{%newpage}
 	 
 next 'done looping over error measures
 
 '--- Delete the temporary page ---'
 pagedelete {%newpage}
-wfselect {%wf}\{%original_page}
+wfselect %wf\{%original_page}
 
 '--- Show the table if we ran from the GUI ---'
 if !dogui=1 then

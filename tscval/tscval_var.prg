@@ -85,7 +85,7 @@ if !dogui =0 then 'extract options passed through the program or use defaults if
 endif
 
 '--- Grab a bit of information from the VAR ---'
-wfselect {%wf}\{%original_page}
+wfselect %wf\{%original_page}
 %group = @getnextname("g_")
 %varmodel = @getnextname("varmod_")
 
@@ -127,17 +127,17 @@ wend
 pagecreate(page={%newpage}) {%freq} {%pagerange}
 
 'Copy stuff to it
-wfselect {%wf}\{%original_page}
+wfselect %wf\{%original_page}
 %group = @getnextname("g_")
 group {%group} {%variables}
 copy(g=d) {%original_page}\{%group} {%newpage}\ '(g=d) --> group definition but not the group object
 copy {%original_page}\{%var} {%newpage}\{%var}
 
 '--- Clean up behind ourselves on the original page, move on to the new one ---'
-wfselect {%wf}\{%original_page}
+wfselect %wf\{%original_page}
 smpl %pagesmpl
 delete {%group}
-wfselect {%wf}\{%newpage}
+wfselect %wf\{%newpage}
 
 '--- Figure out where to begin estimation ---'
 !obs = @round((@dtoo(@word(%fullsample,2))-@dtoo(@word(%fullsample,1)))*(1-!holdout)) 'how many observations in the first estimation sample?
@@ -263,7 +263,7 @@ next
 '--- Create the table & vector objects with output ---'
 for %err {%err_measures} '1 table per error measure
 	
-	wfselect {%wf}\{%newpage}
+	wfselect %wf\{%newpage}
 	
 	%table = "t_cv_" + %err
 	table {%table}
@@ -341,14 +341,14 @@ for %err {%err_measures} '1 table per error measure
 	{%table}.setattr(Estimation_Object) {%var}
 
 	'Copy over to the main page, make sure we don't overwrite existing objects
-	wfselect {%wf}\{%original_page}
+	wfselect %wf\{%original_page}
 	if @isobject(%table) then
 		%resulttable = @getnextname(%table)
 	else
 		%resulttable = %table
 	endif	
 	copy {%newpage}\{%table} {%original_page}\{%resulttable}
-	wfselect {%wf}\{%newpage}
+	wfselect %wf\{%newpage}
 	
 	for !varnum = 1 to @wcount(endog_list)
 		%vec = "v_cv_" + @str(!varnum) + "_" + %err
@@ -361,13 +361,13 @@ for %err {%err_measures} '1 table per error measure
 	next
 
 	'be sure to select back to the temporary page
-	wfselect {%wf}\{%newpage}
+	wfselect %wf\{%newpage}
 	 
 next 'done looping over error measures
 
 '--- Delete the temporary page ---'
 pagedelete {%newpage}
-wfselect {%wf}\{%original_page}
+wfselect %wf\{%original_page}
 
 '--- Show the table if we ran from the GUI ---'
 if !dogui=1 then
@@ -375,4 +375,5 @@ if !dogui=1 then
 endif
 
 '##################################################################################
+
 

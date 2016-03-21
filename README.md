@@ -9,7 +9,7 @@ A repo to make some common tools and algorithms from machine learning pipelines 
 
 ###Installing EViews Add-ins
 
-The instructions below describe installing the tscval add-in. NOTE: requires EVies 9.0 or greater.
+The instructions below describe installing the tscval add-in. NOTE: requires EViews 9.0 or greater.
 
 1. Clone this repo to your local machine. If you are not a Git user, you can download a zip archive of the project [here](https://github.com/jameslamb/ML4EVIEWS/archive/master.zip).
 2. Navigate to ML4EVIEWS/tscval/Installers and open up tscval.aipz.

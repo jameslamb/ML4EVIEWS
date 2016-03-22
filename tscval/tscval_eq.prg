@@ -36,7 +36,8 @@ endif
 %pagerange = @pagerange
 %wf = @wfname
 %eq = _this.@name 'get the name of whatever object we're using this on
-%command = {%eq}.@command 'command to re-estimate (with all the same options) 
+%command = {%eq}.@command 'command to re-estimate (with all the same options)
+%method = {%eq}.@method 
 
 '--- Get Arguments (GUI or programmatic) ---'
 
@@ -125,6 +126,16 @@ pagecreate(page={%newpage}) {%freq} {%pagerange}
 'Copy stuff to it
 wfselect %wf\{%original_page}
 %group = @getnextname("g_")
+
+'at this stage...may need to recalculate %vars if stepwise
+if @upper(%method) = "STEPLS" then
+	%search_vars = @trim(@right(%command,@len(%command)-@instr(%command," @ ")-2)) 'grab search regressors from the command
+	%g = @getnextname("g_")
+	group {%g} {%search_vars}
+	%vars = @trim(%vars) + " " + @trim(@wunique({%g}.@depends))
+	%vars = @wunique(%vars)
+	delete {%g}
+endif
 group {%group} {%vars}
 copy(g=d) {%original_page}\{%group} {%newpage}\
 copy {%original_page}\{%eq} {%newpage}\{%eq}

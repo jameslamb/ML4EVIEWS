@@ -1,0 +1,8 @@
+================================
+Change log for tscval add-in
+================================
+
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+v1.0.1 (Apr 5, 2016)
+
+	[1] Fixed bug in the VAR proc that was causing tscval to try to set the sample outside the workfile range.

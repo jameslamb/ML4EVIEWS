@@ -176,14 +176,18 @@ for !i = 0 to (!toteqs-1)
 		{%var}.forecast(f=na) _{!i} '(f=na) --> NAs over history...series are forecast-only
 		
 		'(f=na) was not working
-		
 		for %x {endog_list}
+			
+			'(f=na) option for VARs was not working
 			smpl @first {%end_est}
 				{%x}_{!i} = NA
 			
+			'Exclude forecasts that go outside %fullsample
 			%post_fcst = @otod(@dtoo(%end_fcst)+1)
-			smpl {%post_fcst} @last
-				{%x}_{!i} = NA
+			if @dtoo(%post_fcst) < @obsrange then
+				smpl {%post_fcst} @last
+					{%x}_{!i} = NA
+			endif
 		next
 
 	'calculate series of errors and add them to the correct group object

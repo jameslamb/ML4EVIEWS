@@ -36,8 +36,8 @@ endif
 %pagerange = @pagerange
 %wf = @wfname
 %eq = _this.@name 'get the name of whatever object we're using this on
-%command = {%eq}.@command 'command to re-estimate (with all the same options)
-%method = {%eq}.@method 
+%command = _this.@command 'command to re-estimate (with all the same options)
+%method = _this.@method 
 
 '--- Get Arguments (GUI or programmatic) ---'
 
@@ -87,7 +87,7 @@ endif
 '--- Get some information from the equation object ---'
 wfselect %wf\{%original_page}
 %group = @getnextname("g_")
-{%eq}.makeregs {%group}
+_this.makeregs {%group}
 %vars = @wunique({%group}.@depends)
 %depvar = @word({%group}.@depends,1) 'dependent variable without transformations
 
@@ -138,7 +138,13 @@ if @upper(%method) = "STEPLS" then
 endif
 group {%group} {%vars}
 copy(g=d) {%original_page}\{%group} {%newpage}\
-copy {%original_page}\{%eq} {%newpage}\{%eq}
+
+'If the equation object was unnamed, call it "untitled" on the new page
+%eq = _this.@name
+if %eq = "" then
+	%eq = @getnextname("untitled_eq")
+endif
+copy {%original_page}\_this {%newpage}\{%eq} 'use _this in case we have untitled object
 
 '--- Clean up behind ourselves on the original page, move on to the new one ---'
 wfselect %wf\{%original_page}

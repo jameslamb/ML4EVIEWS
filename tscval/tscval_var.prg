@@ -37,7 +37,7 @@ endif
 %pagerange = @pagerange
 %wf = @wfname
 %var = _this.@name 'get the name of whatever object we're using this on
-%command = {%var}.@command 'command to re-estimate (with all the same options) 
+%command = _this.@command 'command to re-estimate (with all the same options) 
 
 '--- Get Arguments (GUI or programmatic) ---'
 
@@ -90,7 +90,7 @@ wfselect %wf\{%original_page}
 %varmodel = @getnextname("varmod_")
 
 'extract variable list from the VAR
-{%var}.makemodel({%varmodel})
+_this.makemodel({%varmodel})
 %variables = {%varmodel}.@endoglist + " " + {%varmodel}.@exoglist
 group {%group} {%variables}
 delete {%varmodel}
@@ -131,7 +131,13 @@ wfselect %wf\{%original_page}
 %group = @getnextname("g_")
 group {%group} {%variables}
 copy(g=d) {%original_page}\{%group} {%newpage}\ '(g=d) --> group definition but not the group object
-copy {%original_page}\{%var} {%newpage}\{%var}
+
+'If the VAR object was unnamed, call it "untitled" on the new page
+%var = _this.@name
+if %var = "" then
+	%var = @getnextname("untitled_var")
+endif
+copy {%original_page}\_this {%newpage}\{%var}
 
 '--- Clean up behind ourselves on the original page, move on to the new one ---'
 wfselect %wf\{%original_page}

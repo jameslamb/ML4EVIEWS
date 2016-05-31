@@ -11,3 +11,8 @@ v1.0.1 (Apr 5, 2016)
 v1.0.2 (Apr 8, 2016)
 
 	[1] Fixed bug in the VAR and EQ procs that were causing tscval() to fail if called in the GUI from unnamed objects.
+	
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+v1.0.3 (May 31, 2016)
+
+	[1] Added "median squared error" (medSE) to the list of error options. Fixed minor bug that was referencing @med() function instead of @median().

@@ -4,6 +4,7 @@
 
 	mode quiet
 	setmaxerrs 1
+	logmode logmsg
 		
 	'Create workfile
 	wfcreate(wf=CV_EXAMPLE, page = DATA_M) q 1920 2020 'wf=CV_EXAMPLE, 
@@ -19,10 +20,9 @@
 	'Cross validate each
 	%eqs = @wlookup("EQ_*", "equation")
 	for %eq {%eqs}
-		{%eq}.tscval(ERR="MAE MSE MAPE")
+		{%eq}.tscval(ERR="MAE MSE MAPE medSE medAE SMAPE")
 	next
 		
 
 '##########################################################################################################
-
 

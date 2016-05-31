@@ -52,7 +52,7 @@ endif
 
 'Set up the GUI
 if !dogui = 1 then
-	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
+	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""medSE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
 	
 	'Initialize with reasonable values
 	%holdout = "0.10" 'default to testing over 10% of the training range
@@ -282,13 +282,14 @@ for %err {%err_measures} '1 table per error measure
 		!MSFE = !MSE 'some people use different terms
 		!RMSE = @sqrt(!MSE)
 		!medAE = @median(@abs(v_lev_{%horizon}))
+		!medSE = @median(@epow(v_lev_{%horizon},2))
 		
 		'Percentage Errors
 		!MAPE = @mean(@abs(v_pc_{%horizon}))
 		!MPE = @mean(v_pc_{%horizon})
 		!MSPE = @mean(@epow(v_pc_{%horizon},2))
 		!RMSPE = @sqrt(!MSPE)
-		!medPE = @med(@abs(v_pc_{%horizon}))
+		!medPE = @median(@abs(v_pc_{%horizon}))
 		!SMAPE = @mean(v_sym_{%horizon})
 		
 		'Sign errors
@@ -302,7 +303,7 @@ for %err {%err_measures} '1 table per error measure
 		'STEP 5: Creaing a Single Vector of Errors
 		'How good was the forecast at this horizon?
 		v_cv_{%err}(!col) = !{%err}	
-		{%table}(3, !col+!indent) = !{%err}	
+		{%table}(3, !col+!indent) = !{%err}
 	next
 	
 	'Format the table

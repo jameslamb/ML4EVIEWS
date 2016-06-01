@@ -20,9 +20,10 @@
 	'Cross validate each
 	%eqs = @wlookup("EQ_*", "equation")
 	for %eq {%eqs}
-		{%eq}.tscval(ERR="MAE MSE MAPE medSE medAE SMAPE")
+		{%eq}.tscval(ERR="MAE MSE MAPE medSE medAE SMAPE medPE medSPE")
 	next
 		
 
 '##########################################################################################################
+
 

@@ -52,7 +52,7 @@ endif
 
 'Set up the GUI
 if !dogui = 1 then
-	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""medSE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
+	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""medSE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""medSPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
 	
 	'Initialize with reasonable values
 	%holdout = "0.10" 'default to testing over 10% of the training range
@@ -323,6 +323,7 @@ for %err {%err_measures} '1 table per error measure
 			!MSPE = @mean(@epow(v_{!varnum}_pc_{%horizon},2))
 			!RMSPE = @sqrt(!MSPE)
 			!medPE = @median(@abs(v_{!varnum}_pc_{%horizon}))
+			!medSPE = @median(@epow(v_pc_{%horizon},2))
 			!SMAPE = @mean(v_{!varnum}_sym_{%horizon})
 			
 			'Sign errors

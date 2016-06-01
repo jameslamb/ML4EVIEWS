@@ -15,4 +15,10 @@ v1.0.2 (Apr 8, 2016)
 '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 v1.0.3 (May 31, 2016)
 
-	[1] Added "median squared error" (medSE) to the list of error options. Fixed minor bug that was referencing @med() function instead of @median().
+	[1] Added "median squared error" (medSE) to the list of error options. 
+	[2] Fixed minor bug that was referencing @med() function instead of @median().
+	
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+v1.0.4 (Jun 1, 2016)
+
+	[1] Added "median squared percent error" (medSPE) to the list of error options.

@@ -20,6 +20,13 @@
 	else  
 		%err_measures = "MSE" 
 	endif 
+	
+	'--- Option 4: Do you want to see the raw matrices of forecasts and errors? ---'
+	if @equaloption("KEEP_MATS")<>"" then
+		!keep_matrices = @upper(@equaloption("KEEP_MATS"))="T"
+	else
+		!keep_matrices = 0
+	endif
 
 	'--- Call different programs based on type of object ---'
 	%type = @getthistype
@@ -27,13 +34,13 @@
 		
 		'--- Case 1. Equation object ---'
 		if %type = "EQUATION" then
-			exec ".\tscval_eq.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measures}, PROC)
+			exec ".\tscval_eq.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measures}, KEEP_MATS = {!keep_matrices}, PROC)
 			exitloop
 		endif
 		
 		'--- Case 2. VAR object ---'
 		if %type = "VAR" then
-			exec ".\tscval_var.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measures}, PROC)
+			exec ".\tscval_var.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measures}, KEEP_MATS = {!keep_matrices}, PROC)
 			exitloop
 		endif
 		

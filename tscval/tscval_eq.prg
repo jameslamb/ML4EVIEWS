@@ -176,7 +176,7 @@ if !keep_matrices then
 	while 1
 		%matrix_page = "matpg_" + @str(!num)
 		if @pageexist(%matrix_page)=0 then
-			pagecreate(page={%matrix_page}) u 1
+			pagecreate(page={%matrix_page}) {%freq} {%pagerange}
 			exitloop
 		else
 			!num = !num + 1
@@ -405,10 +405,24 @@ if !keep_matrices then
 	%mats = @wlookup("m_*", "matrix")
 	for %mat {%mats}
 		wfselect %wf\{%matrix_page}
+		
+		'Assign some metadata
 		{%mat}.setattr(Interpretation) Number of rows = workfile range. Each column = forecast from model trained over one training sample.
 		{%mat}.setattr(Series) {%depvar}
 		{%mat}.setattr(Estimation_Object) {%eq}
 		
+		'Set row labels (this is tedious)
+		!obs = @obsrange
+		%sv = @getnextname("sv_tmp")
+		svector(!obs) {%sv}
+		for !i = 1 to !obs
+			{%sv}(!i) = @otod(!i)
+		next
+		%labels = @wjoin({%sv})
+		{%mat}.setrowlabels {%labels}
+		delete {%sv}
+		
+		'Copy back to the original page
 		wfselect %wf\{%original_page}
 		if @isobject(%mat)=0 then
 			copy {%matrix_page}\{%mat} {%original_page}\{%mat}

@@ -22,3 +22,8 @@ v1.0.3 (May 31, 2016)
 v1.0.4 (Jun 1, 2016)
 
 	[1] Added "median squared percent error" (medSPE) to the list of error options.
+	
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+v1.0.5 (Jun 16, 2016)
+
+	[1] Added "mean forecast error" (MFE) and "median forecast error" (medFE) to the list of error options.

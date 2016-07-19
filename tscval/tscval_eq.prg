@@ -12,7 +12,7 @@ setmaxerrs 1
 mode quiet
 
 '--- Set the log mode ---'		
-!debug = 0 'set to 1 if you want the logmsgs to display
+!debug = 1 'set to 1 if you want the logmsgs to display
 if !debug = 0 then
 	logmode +addin
 else
@@ -58,9 +58,10 @@ if !dogui = 1 then
 	%holdout = "0.10" 'default to testing over 10% of the training range
 	%fullsample = %pagerange '%training_range
 	%err_measures = "MAE"
+	!keep_matrices = 0
 			
 	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
-		"list", %err_measures, "Preferred error measure", %error_types)	
+		"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_matrices, "Keep matrices of forecasts and errors")	
 	
 	'--- Stop the program if the users Xs out of the GUI ---'
 	if !result = -1 then 'will stop the program unless OK is selected in GUI
@@ -81,7 +82,8 @@ endif
 if !dogui =0 then 'extract options passed through the program or use defaults if nothing is passed
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
-	%err_measures = @equaloption("ERR") 
+	%err_measures = @equaloption("ERR")
+	!keep_matrices = @val(@equaloption("KEEP_MATS"))
 endif
 
 '--- Get some information from the equation object ---'
@@ -167,9 +169,28 @@ for %type lev pc sgn sym
 	group g_{%type}
 next
 
+'At this point...if we are storing the matrices, create a group for the forecasts
+if !keep_matrices then
+	!num = 1
+	
+	while 1
+		%matrix_page = "matpg_" + @str(!num)
+		if @pageexist(%matrix_page)=0 then
+			pagecreate(page={%matrix_page}) {%freq} {%pagerange}
+			exitloop
+		else
+			!num = !num + 1
+		endif
+	wend
+	
+	wfselect %wf\{%newpage}
+	group g_fcst
+endif
+
 'initialize
 %start_est = @word(%fullsample,1)
 %end_fcst = @word(%fullsample,2)
+%fcst_list = "" 'list of forecast series, to be deleted at the end
 for !i = 0 to (!toteqs-1)
 	
 	'Date strings
@@ -216,10 +237,25 @@ for !i = 0 to (!toteqs-1)
 		
 	smpl @all
 	
+	'Add the forecast to its group if we're keeping the matrices
+	if !keep_matrices then
+		g_fcst.add {%fcst}
+	endif
+	
 	'clean up
-	delete {%fcst} changes
+	%fcst_list = %fcst_list + " " + %fcst
+	delete changes
 		
 next
+
+'--- Grab the forecast matrix (if we're keeping it) ---'
+if !keep_matrices then
+	smpl @all
+	stomna(g_fcst, m_fcst)
+	copy {%newpage}\m_fcst {%matrix_page}\m_fcst
+	delete g_fcst
+endif
+delete {%fcst_list}
 
 '--- Create vectors with the n-step-ahead errors ---'
 for %type lev pc sgn sym
@@ -227,6 +263,17 @@ for %type lev pc sgn sym
 	'Convert group of errors to matrix
 	smpl {%first_fcst_start} {%fcst_end}
 		stomna(g_{%type},m_{%type})
+		
+	'If we are keeping matrices, move this over
+	if !keep_matrices then
+		%tmp_mat = @getnextname(%tmp_mat)
+		smpl @all
+			stomna(g_{%type}, {%tmp_mat})
+		copy {%newpage}\{%tmp_mat} {%matrix_page}\m_{%type}
+		wfselect %wf\{%newpage}
+		delete {%tmp_mat}
+	endif
+	smpl {%first_fcst_start} {%fcst_end}
 		
 	'Grab n-step-ahead error vectors from the matrix
 	!horizon = 1
@@ -344,6 +391,51 @@ for %err {%err_measures} '1 table per error measure
 	wfselect %wf\{%newpage}
 	 
 next 'done looping over error measures
+
+'--- If we're keeping the matrices around, go get them now ---'
+if !keep_matrices then
+	
+	wfselect %wf\{%matrix_page}
+	
+	'Assign metadata
+	m_sgn.setattr(Description) Matrix of "correct-sign" errors. (1=correct direction of change)
+	m_lev.setattr(Description) Matrix of errors in the same units as the dependent variable.
+	m_pc.setattr(Description)  Matrix of percentage errors.
+	m_sym.setattr(Description) Matrix of symmetric errors used in SMAPE calculation.
+	m_fcst.setattr(Description) Matrix of forecasts from tscval. Note that this matrix contains only forecast (no actuals).
+	
+	%mats = @wlookup("m_*", "matrix")
+	for %mat {%mats}
+		wfselect %wf\{%matrix_page}
+		
+		'Assign some metadata
+		{%mat}.setattr(Interpretation) Number of rows = workfile range. Each column = forecast from model trained over one training sample.
+		{%mat}.setattr(Series) {%depvar}
+		{%mat}.setattr(Estimation_Object) {%eq}
+		
+		'Set row labels (this is tedious)
+		!obs = @obsrange
+		%sv = @getnextname("sv_tmp")
+		svector(!obs) {%sv}
+		for !i = 1 to !obs
+			{%sv}(!i) = @otod(!i)
+		next
+		%labels = @wjoin({%sv})
+		{%mat}.setrowlabels {%labels}
+		delete {%sv}
+		
+		'Copy back to the original page
+		wfselect %wf\{%original_page}
+		if @isobject(%mat)=0 then
+			copy {%matrix_page}\{%mat} {%original_page}\{%mat}
+		else
+			%obj = @getnextname(%mat)
+			copy {%matrix_page}\{%mat} {%original_page}\{%obj}
+		endif
+	next
+	
+	pagedelete {%matrix_page}
+endif
 
 '--- Delete the temporary page ---'
 pagedelete {%newpage}

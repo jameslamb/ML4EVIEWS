@@ -27,3 +27,8 @@ v1.0.4 (Jun 1, 2016)
 v1.0.5 (Jun 16, 2016)
 
 	[1] Added "mean forecast error" (MFE) and "median forecast error" (medFE) to the list of error options.
+	
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+v1.0.6 (Jul 19, 2016)
+
+	[1] Added "keep_mats" option to the equation proc to allow users to view matrices of raw forecasts and errors.

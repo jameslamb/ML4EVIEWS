@@ -266,7 +266,7 @@ for %type lev pc sgn sym
 		
 	'If we are keeping matrices, move this over
 	if !keep_matrices then
-		%tmp_mat = @getnextname(%tmp_mat)
+		%tmp_mat = @getnextname("tmp_mat")
 		smpl @all
 			stomna(g_{%type}, {%tmp_mat})
 		copy {%newpage}\{%tmp_mat} {%matrix_page}\m_{%type}

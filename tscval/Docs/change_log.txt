@@ -32,3 +32,12 @@ v1.0.5 (Jun 16, 2016)
 v1.0.6 (Jul 19, 2016)
 
 	[1] Added "keep_mats" option to the equation proc to allow users to view matrices of raw forecasts and errors.
+	
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+v1.1.1 (Jul 26, 2016)
+
+	[1] Added "tscv_score", a proc for scoring the error vector generated from tscval() (move to v1.1.* reflects this addition)
+	[2] Added documentation for tscv_score in tscval.pdf
+	[3] Fixed minor bug referencing an empty string in assigning a temporary name to the matrix of forecasts in tscval
+	[4] Fixed minor bug that was causing vector objects from the VAR proc to be overwritten if tscval had already been run in the wf
+	[5] Added "keep_mats" option to the VAR proc

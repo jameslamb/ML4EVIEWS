@@ -12,7 +12,7 @@ setmaxerrs 1
 mode quiet
 
 '--- Set the log mode ---'		
-!debug = 1 'set to 1 if you want the logmsgs to display
+!debug = 0 'set to 1 if you want the logmsgs to display
 if !debug = 0 then
 	logmode +addin
 else
@@ -79,7 +79,7 @@ if !dogui = 1 then
 endif
 
 '--- Grab program options if not running from the GUI ---'
-if !dogui =0 then 'extract options passed through the program or use defaults if nothing is passed
+if !dogui = 0 then 'extract options passed through the program or use defaults if nothing is passed
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
 	%err_measures = @equaloption("ERR")
@@ -413,7 +413,7 @@ if !keep_matrices then
 		{%mat}.setattr(Series) {%depvar}
 		{%mat}.setattr(Estimation_Object) {%eq}
 		
-		'Set row labels (this is tedious)
+		'Set row labels to wf dates (this is tedious)
 		!obs = @obsrange
 		%sv = @getnextname("sv_tmp")
 		svector(!obs) {%sv}

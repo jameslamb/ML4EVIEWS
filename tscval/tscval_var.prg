@@ -58,9 +58,10 @@ if !dogui = 1 then
 	%holdout = "0.10" 'default to testing over 10% of the training range
 	%fullsample = %pagerange '%training_range
 	%err_measures = "MAE"
+	!keep_matrices = 0
 			
 	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
-		"list", %err_measures, "Preferred error measure", %error_types)
+		"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_matrices, "Keep matrices of forecasts and errors")
 		
 	'--- Stop the program if the users Xs out of the GUI ---'
 	if !result = -1 then 'will stop the program unless OK is selected in GUI
@@ -81,7 +82,8 @@ endif
 if !dogui =0 then 'extract options passed through the program or use defaults if nothing is passed
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
-	%err_measures = @equaloption("ERR") 
+	%err_measures = @equaloption("ERR")
+	!keep_matrices = @val(@equaloption("KEEP_MATS"))
 endif
 
 '--- Grab a bit of information from the VAR ---'
@@ -164,9 +166,31 @@ for !varnum = 1	 to @wcount(endog_list)
 	next
 next
 
+'At this point...if we are storing the matrices, create groups
+if !keep_matrices then
+	!num = 1
+	
+	'matrix page
+	while 1
+		%matrix_page = "matpg_" + @str(!num)
+		if @pageexist(%matrix_page)=0 then
+			pagecreate(page={%matrix_page}) {%freq} {%pagerange}
+			exitloop
+		else
+			!num = !num + 1
+		endif
+	wend
+	
+	wfselect %wf\{%newpage}
+	for !varnum = 1	 to @wcount({%varmodel}.@endoglist)
+		group g_{!varnum}_fcst
+	next
+endif
+
 'initialize
 %start_est = @word(%fullsample,1)
 %end_fcst = @word(%fullsample,2)
+%fcst_list = ""
 for !i = 0 to (!toteqs-1)
 	
 	'Date strings
@@ -203,6 +227,7 @@ for !i = 0 to (!toteqs-1)
 			
 			%endog = @word(endog_list,!varnum)
 			%fcst = %endog + "_" + @str(!i)
+			%fcst_list = %fcst_list + " " + %fcst
 			
 			'--- 1. Level Errors ---'
 			%f = @getnextname(%fcst+"_lev")									
@@ -229,14 +254,31 @@ for !i = 0 to (!toteqs-1)
 			%f = @getnextname(%fcst+"_sym")
 			series {%f} = 2*@abs({%endog} - {%fcst})/(@abs({%endog}) + @abs({%fcst}))
 			g_{!varnum}_sym.add {%f}
+			
+			'--- 5. Add forecasts to the group object if we're keeping matrices ---'
+			if !keep_matrices then
+				g_{!varnum}_fcst.add {%fcst}
+			endif
+	
 		next
 		
 	smpl @all
 	
 	'clean up
-	delete {%fcst} changes
+	delete changes'{%fcst} changes
 		
 next
+
+'--- Grab the forecast matrices (if we're keeping them) ---'
+if !keep_matrices then
+	smpl @all
+	for !varnum = 1 to @wcount(endog_list)
+		stomna(g_{!varnum}_fcst, m_{!varnum}_fcst)
+		copy {%newpage}\m_{!varnum}_fcst {%matrix_page}\m_{!varnum}_fcst
+		delete g_{!varnum}_fcst
+	next
+endif
+delete {%fcst_list}
 
 '--- Create vectors with the n-step-ahead errors ---'
 for !varnum = 1 to @wcount(endog_list)
@@ -245,6 +287,17 @@ for !varnum = 1 to @wcount(endog_list)
 		'Convert group of errors to matrix
 		smpl {%first_fcst_start} {%fcst_end}
 			stomna(g_{!varnum}_{%type},m_{!varnum}_{%type})
+			
+		'If we are keeping matrices, move this over
+		if !keep_matrices then
+			%tmp_mat = @getnextname("tmp_mat")
+			smpl @all
+				stomna(g_{!varnum}_{%type}, {%tmp_mat})
+			copy {%newpage}\{%tmp_mat} {%matrix_page}\m_{!varnum}_{%type}
+			wfselect %wf\{%newpage}
+			delete {%tmp_mat}
+		endif
+		smpl {%first_fcst_start} {%fcst_end}
 			
 		'Grab n-step-ahead error vectors from the matrix
 		!horizon = 1
@@ -326,7 +379,7 @@ for %err {%err_measures} '1 table per error measure
 			!MSPE = @mean(@epow(v_{!varnum}_pc_{%horizon},2))
 			!RMSPE = @sqrt(!MSPE)
 			!medPE = @median(@abs(v_{!varnum}_pc_{%horizon}))
-			!medSPE = @median(@epow(v_pc_{%horizon},2))
+			!medSPE = @median(@epow(v_{!varnum}_pc_{%horizon},2))
 			!SMAPE = @mean(v_{!varnum}_sym_{%horizon})
 			
 			'Sign errors
@@ -366,6 +419,7 @@ for %err {%err_measures} '1 table per error measure
 	wfselect %wf\{%newpage}
 	
 	for !varnum = 1 to @wcount(endog_list)
+		wfselect %wf\{%original_page}
 		%vec = "v_cv_" + @str(!varnum) + "_" + %err
 		if @isobject(%vec) then
 			%errorvector = @getnextname(%vec)
@@ -379,6 +433,60 @@ for %err {%err_measures} '1 table per error measure
 	wfselect %wf\{%newpage}
 	 
 next 'done looping over error measures
+
+'--- If we're keeping the matrices around, go get them now ---'
+if !keep_matrices then
+	
+	'grab the count of the list of endogenous variables
+	copy {%newpage}\endog_list {%matrix_page}\endog_list
+
+	wfselect %wf\{%matrix_page}
+	
+	for !varnum = 1 to @wcount(endog_list)
+		
+		wfselect %wf\{%matrix_page}
+		
+		'Assign metadata
+		m_{!varnum}_sgn.setattr(Description) Matrix of "correct-sign" errors. (1=correct direction of change)
+		m_{!varnum}_lev.setattr(Description) Matrix of errors in the same units as the dependent variable.
+		m_{!varnum}_pc.setattr(Description)  Matrix of percentage errors.
+		m_{!varnum}_sym.setattr(Description) Matrix of symmetric errors used in SMAPE calculation.
+		m_{!varnum}_fcst.setattr(Description) Matrix of forecasts from tscval. Note that this matrix contains only forecast (no actuals).
+		
+		%mats = @wlookup("m_"+@str(!varnum)+"_*", "matrix")
+		for %mat {%mats}
+			wfselect %wf\{%matrix_page}
+			
+			'Assign some metadata
+			%depvar = @word(endog_list, !varnum)
+			{%mat}.setattr(Interpretation) Number of rows = workfile range. Each column = forecast from model trained over one training sample.
+			{%mat}.setattr(Series) {%depvar}
+			{%mat}.setattr(Estimation_Object) {%var}
+			
+			'Set row labels to wf dates (this is tedious)
+			!obs = @obsrange
+			%sv = @getnextname("sv_tmp")
+			svector(!obs) {%sv}
+			for !i = 1 to !obs
+				{%sv}(!i) = @otod(!i)
+			next
+			%labels = @wjoin({%sv})
+			{%mat}.setrowlabels {%labels}
+			delete {%sv}
+			
+			'Copy back to the original page
+			wfselect %wf\{%original_page}
+			if @isobject(%mat)=0 then
+				copy {%matrix_page}\{%mat} {%original_page}\{%mat}
+			else
+				%obj = @getnextname(%mat)
+				copy {%matrix_page}\{%mat} {%original_page}\{%obj}
+			endif
+		next
+	next 'done looping over variables
+	
+	pagedelete {%matrix_page}
+endif
 
 '--- Delete the temporary page ---'
 pagedelete {%newpage}

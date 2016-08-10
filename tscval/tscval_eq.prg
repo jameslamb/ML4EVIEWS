@@ -37,7 +37,16 @@ endif
 %wf = @wfname
 %eq = _this.@name 'get the name of whatever object we're using this on
 %command = _this.@command 'command to re-estimate (with all the same options)
-%method = _this.@method 
+%method = _this.@method
+
+'--- Get some information from the equation object ---'
+wfselect %wf\{%original_page}
+%group = @getnextname("g_")
+_this.makeregs {%group}
+%vars = @wunique({%group}.@depends)
+%base_depvar = @word({%group}.@depends,1) 'dependent variable without transformations
+%current_depvar = @word(_this.@varlist,1) 'dependent variable with transformation as passed in
+delete {%group}
 
 '--- Get Arguments (GUI or programmatic) ---'
 
@@ -59,8 +68,11 @@ if !dogui = 1 then
 	%fullsample = %pagerange '%training_range
 	%err_measures = "MAE"
 	!keep_matrices = 0
+	!var_form = 1 '1 = "BASE" | 2 = "CURRENT"
+		%var_options = %base_depvar + " " + %current_depvar
 			
-	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
+	!result = @uidialog("radio", !var_form, "Which dependent variable would you like to see error estimates for?", %var_options, _
+		"edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
 		"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_matrices, "Keep matrices of forecasts and errors")	
 	
 	'--- Stop the program if the users Xs out of the GUI ---'
@@ -75,7 +87,13 @@ if !dogui = 1 then
 	if %err_measures = "Correct sign (%)" then
 		%err_measures = "SIGNP"
 	endif		
-	!holdout = @val(%holdout)	
+	!holdout = @val(%holdout)
+	
+	'Map decision on variable form to character
+	%var_form = "BASE"
+	if !var_form = 2 then
+		%var_form = "CURRENT"
+	endif
 endif
 
 '--- Grab program options if not running from the GUI ---'
@@ -84,20 +102,21 @@ if !dogui = 0 then 'extract options passed through the program or use defaults i
 	!holdout = @val(@equaloption("H"))
 	%err_measures = @equaloption("ERR")
 	!keep_matrices = @val(@equaloption("KEEP_MATS"))
+	%var_form = @equaloption("VAR_FORM")
 endif
 
-'--- Get some information from the equation object ---'
-wfselect %wf\{%original_page}
-%group = @getnextname("g_")
-_this.makeregs {%group}
-%vars = @wunique({%group}.@depends)
-%depvar = @word({%group}.@depends,1) 'dependent variable without transformations
+'--- Update definition of %depvar? ---'
+%depvar = %base_depvar
+if %var_form = "CURRENT" then
+	%depvar = %current_depvar
+endif
 
 '--- Adjust the training range (%fullsample) if necessary ---'
 
 'Figure out the bounds of the estimable sample (assumes continuous series)
 %mat = @getnextname("m_")
 smpl @all
+	_this.makeregs {%group}
 	stomna({%group}, {%mat}) 'the matrix will help find earliest and latest data to figure out appropriate data sample
 smpl @all
 %earliest = @otod(@max(@cifirst({%mat})))
@@ -187,6 +206,16 @@ if !keep_matrices then
 	group g_fcst
 endif
 
+'if the user wants "current" version, save evaluation of that in a temporary series to avoid syntax errors
+if %var_form = "CURRENT" then
+	%dep_eval = @getnextname("dep_eval")
+	smpl @all
+		series {%dep_eval} = {%current_depvar}
+	smpl @all
+else
+	%dep_eval = %depvar
+endif
+
 'initialize
 %start_est = @word(%fullsample,1)
 %end_fcst = @word(%fullsample,2)
@@ -204,26 +233,37 @@ for !i = 0 to (!toteqs-1)
 	'Forecast
 	smpl {%start_fcst} {%end_fcst}
 		%fcst = @getnextname("fcst")
-		{%eq}.forecast(f=na) {%fcst} '(f=na) --> NAs over history...series are forecast-only
 		
+		if %var_form = "CURRENT" then
+			{%eq}.forecast(d, f=na) {%fcst} '(d) --> forecast entire expression of depvar | (f=na) --> NAs over history...series are forecast-only
+		else
+			'Forecast variable in its base form (stripped of transformations)
+			{%eq}.forecast(f=na) {%fcst} '(f=na) --> NAs over history...series are forecast-only
+		endif
+			
 	'calculate series of errors and add them to the correct group object
 	smpl @all
 	
 		'--- 1. Level Errors ---'
 		%f = @getnextname(%fcst+"_lev")									
-		series {%f} = {%depvar} - {%fcst}
+		series {%f} = {%dep_eval} - {%fcst}
 		g_lev.add {%f}
 		
 		'--- 2. Percentage Errors ---'
 		%f = @getnextname(%fcst+"_pc")
-		series {%f} = 100*({%depvar}-{%fcst})/{%depvar}
+		string a = %dep_eval + " | " + %depvar
+		series {%f} = 100*({%dep_eval}-{%fcst})/{%dep_eval}
 		g_pc.add {%f}
 		
 		'--- 3. Sign errors ---'
 		'intuition--> "Did we correctly predict the direction of change between n periods ago and today?"
-		
-		!last_hist_point = @elem({%depvar}, %end_est) 'grab the last value from history
-		series changes = {%depvar} - !last_hist_point
+		if %var_form = "CURRENT" then
+			'Cannot use @elem() with some operators like d()
+			!last_hist_point = @elem({%dep_eval}, %end_est) 'grab the last value from history
+		else
+			!last_hist_point = @elem({%dep_eval}, %end_est) 'grab the last value from history
+		endif
+		series changes = {%dep_eval} - !last_hist_point
 			changes = @recode(changes=0, 1e-08, changes) 'recode 0s to small positives (treat 0 as positive)
 		
 		%f = @getnextname(%fcst+"_sgn")
@@ -232,7 +272,7 @@ for !i = 0 to (!toteqs-1)
 		
 		'--- 4. Sums for SMAPE (see http://robjhyndman.com/hyndsight/smape/) ---'
 		%f = @getnextname(%fcst+"_sym")
-		series {%f} = 2*@abs({%depvar} - {%fcst})/(@abs({%depvar}) + @abs({%fcst}))
+		series {%f} = 2*@abs({%dep_eval} - {%fcst})/(@abs({%dep_eval}) + @abs({%fcst}))
 		g_sym.add {%f}
 		
 	smpl @all

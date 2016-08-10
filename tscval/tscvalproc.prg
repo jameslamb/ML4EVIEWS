@@ -27,6 +27,14 @@
 	else
 		!keep_matrices = 0
 	endif
+	
+	'--- Option 5: Do you want to get error stats for dependent variable WITH transformations? ---'
+	'NOTE: Only implemented for equation objects
+	if @equaloption("VAR_FORM")<>"" then
+		%var_form = @upper(@equaloption("VAR_FORM"))
+	else
+		%var_form = "BASE" 'default: base form (transformations stripped)
+	endif
 
 	'--- Call different programs based on type of object ---'
 	%type = @getthistype
@@ -34,7 +42,7 @@
 		
 		'--- Case 1. Equation object ---'
 		if %type = "EQUATION" then
-			exec ".\tscval_eq.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measures}, KEEP_MATS = {!keep_matrices}, PROC)
+			exec ".\tscval_eq.prg"(sample = {%fullsample}, H = {!holdout}, ERR = {%err_measures}, KEEP_MATS = {!keep_matrices}, VAR_FORM = {%var_form}, PROC)
 			exitloop
 		endif
 		

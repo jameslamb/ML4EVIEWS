@@ -1,6 +1,6 @@
 %docs = ".\Docs\tscval.pdf"
 %url = "http://raw.githubusercontent.com/jameslamb/ML4EVIEWS/master/tscval/update_info.xml"
-%version = "1.1.1"
+%version = "1.1.2"
 
 
 addin(type="equation", proc="tscval", docs=%docs, url=%url,version={%version}) ".\tscvalproc.prg"

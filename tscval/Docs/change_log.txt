@@ -41,3 +41,9 @@ v1.1.1 (Jul 26, 2016)
 	[3] Fixed minor bug referencing an empty string in assigning a temporary name to the matrix of forecasts in tscval
 	[4] Fixed minor bug that was causing vector objects from the VAR proc to be overwritten if tscval had already been run in the wf
 	[5] Added "keep_mats" option to the VAR proc
+	
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+v1.1.2 (Aug 10, 2016)
+
+	[1] Added "VAR_FORM" option for the equation proc, to allow users the option to see error stats for dependent variable 
+		specified by expression (default in tscval is to use dependent variable with transformation removed)

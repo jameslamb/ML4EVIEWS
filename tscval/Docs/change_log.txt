@@ -47,3 +47,9 @@ v1.1.2 (Aug 10, 2016)
 
 	[1] Added "VAR_FORM" option for the equation proc, to allow users the option to see error stats for dependent variable 
 		specified by expression (default in tscval is to use dependent variable with transformation removed)
+		
+'++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+v1.1.3 (Nov 23, 2016)
+
+	[1] Fixed bug in which users trying to run tscval on legacy EViews version (pre EV9) were getting a cryptic error message.
+		(Thanks to Eric Lascelles for reporting this)

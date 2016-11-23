@@ -4,8 +4,8 @@ A repo to make some common tools and algorithms from machine learning pipelines 
 
 ###Collaborators:
 
-- James Lamb (Abbott Laboratories)
-- Rita Linets (ex-IHS Economics)
+- James Lamb (Uptake)
+- Rita Linets (Wayfair)
 
 ###Installing EViews Add-ins
 

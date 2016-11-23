@@ -20,16 +20,6 @@ else
 	logmsg
 endif
 
-'--- Check that we are on a time series page ---'
-if @pagefreq = "u" or @ispanel then
-	seterr "Procedure must be run on a time-series page."
-endif
-
-'--- Check the version ---'
-if @vernum < 9 then
-	seterr "EViews version 9.0 or higher is required to run this add-in."
-endif
-
 '--- Environment Info ---'
 %freq = @pagefreq 'page frequency
 %pagesmpl = @pagesmpl

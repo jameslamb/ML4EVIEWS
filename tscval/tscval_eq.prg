@@ -12,19 +12,20 @@ setmaxerrs 1
 mode quiet
 
 '--- Set the log mode ---'		
-!debug = 1 'set to 1 if you want the logmsgs to display
+!debug = 0 'set to 1 if you want the logmsgs to display
 if !debug = 0 then
 	logmode +addin
 else
 	logmode logmsg
 endif
 
-'--- Check that we are on a time series page ---'
+'--- Conduct logic checks to make sure that TSCVAL can execute on the workfile ---'
+'--- Check 1: Check that we are on a time series page ---'
 if @pagefreq = "u" or @ispanel then
 	seterr "Procedure must be run on a time-series page."
 endif
 
-'--- Check the version ---'
+'--- Check 2: Check the version ---'
 if @vernum < 9 then
 	seterr "EViews version 9.0 or higher is required to run this add-in."
 endif
@@ -37,7 +38,16 @@ endif
 %wf = @wfname
 %eq = _this.@name 'get the name of whatever object we're using this on
 %command = _this.@command 'command to re-estimate (with all the same options)
-%method = _this.@method 
+%method = _this.@method
+
+'--- Get some information from the equation object ---'
+wfselect %wf\{%original_page}
+%group = @getnextname("g_")
+_this.makeregs {%group}
+%vars = @wunique({%group}.@depends)
+%base_depvar = @word({%group}.@depends,1) 'dependent variable without transformations
+%current_depvar = @word(_this.@varlist,1) 'dependent variable with transformation as passed in
+delete {%group}
 
 '--- Get Arguments (GUI or programmatic) ---'
 
@@ -52,17 +62,26 @@ endif
 
 'Set up the GUI
 if !dogui = 1 then
-	%error_types = " ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""medSE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""medSPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
+	%error_types = " ""MFE"" ""medFE"" ""MSE"" ""MAE"" ""RMSE"" ""MSFE"" ""medAE"" ""medSE"" ""MAPE"" ""SMAPE"" ""MPE"" ""MSPE"" ""RMSPE"" ""medPE"" ""medSPE"" ""Correct sign (count)"" ""Correct sign (%)"" " 			
 	
 	'Initialize with reasonable values
 	%holdout = "0.10" 'default to testing over 10% of the training range
 	%fullsample = %pagerange '%training_range
 	%err_measures = "MAE"
 	!keep_matrices = 0
-			
-	!result = @uidialog("edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
-		"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_matrices, "Keep matrices of forecasts and errors")	
+	!var_form = 1 '1 = "BASE" | 2 = "CURRENT"
+		%var_options = %base_depvar + " " + %current_depvar
 	
+	'Only use UI with variable-form option if the dependent variable has transformations
+	if %current_depvar = %base_depvar then		
+		!result = @uidialog( "edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
+			"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_matrices, "Keep matrices of forecasts and errors")
+	else
+		!result = @uidialog("radio", !var_form, "Which dependent variable would you like to see error estimates for?", %var_options, _
+			"edit", %fullsample, "Sample", "edit", %holdout, "Maximum % of the training range to hold out", _
+			"list", %err_measures, "Preferred error measure", %error_types, "Check", !keep_matrices, "Keep matrices of forecasts and errors")
+	endif
+			
 	'--- Stop the program if the users Xs out of the GUI ---'
 	if !result = -1 then 'will stop the program unless OK is selected in GUI
 		stop
@@ -75,29 +94,36 @@ if !dogui = 1 then
 	if %err_measures = "Correct sign (%)" then
 		%err_measures = "SIGNP"
 	endif		
-	!holdout = @val(%holdout)	
+	!holdout = @val(%holdout)
+	
+	'Map decision on variable form to character
+	%var_form = "BASE"
+	if !var_form = 2 then
+		%var_form = "CURRENT"
+	endif
 endif
 
 '--- Grab program options if not running from the GUI ---'
-if !dogui =0 then 'extract options passed through the program or use defaults if nothing is passed
+if !dogui = 0 then 'extract options passed through the program or use defaults if nothing is passed
 	%fullsample  = @equaloption("SAMPLE") 
 	!holdout = @val(@equaloption("H"))
 	%err_measures = @equaloption("ERR")
 	!keep_matrices = @val(@equaloption("KEEP_MATS"))
+	%var_form = @equaloption("VAR_FORM")
 endif
 
-'--- Get some information from the equation object ---'
-wfselect %wf\{%original_page}
-%group = @getnextname("g_")
-_this.makeregs {%group}
-%vars = @wunique({%group}.@depends)
-%depvar = @word({%group}.@depends,1) 'dependent variable without transformations
+'--- Update definition of %depvar? ---'
+%depvar = %base_depvar
+if %var_form = "CURRENT" then
+	%depvar = %current_depvar
+endif
 
 '--- Adjust the training range (%fullsample) if necessary ---'
 
 'Figure out the bounds of the estimable sample (assumes continuous series)
 %mat = @getnextname("m_")
 smpl @all
+	_this.makeregs {%group}
 	stomna({%group}, {%mat}) 'the matrix will help find earliest and latest data to figure out appropriate data sample
 smpl @all
 %earliest = @otod(@max(@cifirst({%mat})))
@@ -187,6 +213,16 @@ if !keep_matrices then
 	group g_fcst
 endif
 
+'if the user wants "current" version, save evaluation of that in a temporary series to avoid syntax errors
+if %var_form = "CURRENT" then
+	%dep_eval = @getnextname("dep_eval")
+	smpl @all
+		series {%dep_eval} = {%current_depvar}
+	smpl @all
+else
+	%dep_eval = %depvar
+endif
+
 'initialize
 %start_est = @word(%fullsample,1)
 %end_fcst = @word(%fullsample,2)
@@ -204,26 +240,37 @@ for !i = 0 to (!toteqs-1)
 	'Forecast
 	smpl {%start_fcst} {%end_fcst}
 		%fcst = @getnextname("fcst")
-		{%eq}.forecast(f=na) {%fcst} '(f=na) --> NAs over history...series are forecast-only
 		
+		if %var_form = "CURRENT" then
+			{%eq}.forecast(d, f=na) {%fcst} '(d) --> forecast entire expression of depvar | (f=na) --> NAs over history...series are forecast-only
+		else
+			'Forecast variable in its base form (stripped of transformations)
+			{%eq}.forecast(f=na) {%fcst} '(f=na) --> NAs over history...series are forecast-only
+		endif
+			
 	'calculate series of errors and add them to the correct group object
 	smpl @all
 	
 		'--- 1. Level Errors ---'
 		%f = @getnextname(%fcst+"_lev")									
-		series {%f} = {%depvar} - {%fcst}
+		series {%f} = {%dep_eval} - {%fcst}
 		g_lev.add {%f}
 		
 		'--- 2. Percentage Errors ---'
 		%f = @getnextname(%fcst+"_pc")
-		series {%f} = 100*({%depvar}-{%fcst})/{%depvar}
+		string a = %dep_eval + " | " + %depvar
+		series {%f} = 100*({%dep_eval}-{%fcst})/{%dep_eval}
 		g_pc.add {%f}
 		
 		'--- 3. Sign errors ---'
 		'intuition--> "Did we correctly predict the direction of change between n periods ago and today?"
-		
-		!last_hist_point = @elem({%depvar}, %end_est) 'grab the last value from history
-		series changes = {%depvar} - !last_hist_point
+		if %var_form = "CURRENT" then
+			'Cannot use @elem() with some operators like d()
+			!last_hist_point = @elem({%dep_eval}, %end_est) 'grab the last value from history
+		else
+			!last_hist_point = @elem({%dep_eval}, %end_est) 'grab the last value from history
+		endif
+		series changes = {%dep_eval} - !last_hist_point
 			changes = @recode(changes=0, 1e-08, changes) 'recode 0s to small positives (treat 0 as positive)
 		
 		%f = @getnextname(%fcst+"_sgn")
@@ -232,7 +279,7 @@ for !i = 0 to (!toteqs-1)
 		
 		'--- 4. Sums for SMAPE (see http://robjhyndman.com/hyndsight/smape/) ---'
 		%f = @getnextname(%fcst+"_sym")
-		series {%f} = 2*@abs({%depvar} - {%fcst})/(@abs({%depvar}) + @abs({%fcst}))
+		series {%f} = 2*@abs({%dep_eval} - {%fcst})/(@abs({%dep_eval}) + @abs({%fcst}))
 		g_sym.add {%f}
 		
 	smpl @all
@@ -266,7 +313,7 @@ for %type lev pc sgn sym
 		
 	'If we are keeping matrices, move this over
 	if !keep_matrices then
-		%tmp_mat = @getnextname(%tmp_mat)
+		%tmp_mat = @getnextname("tmp_mat")
 		smpl @all
 			stomna(g_{%type}, {%tmp_mat})
 		copy {%newpage}\{%tmp_mat} {%matrix_page}\m_{%type}
@@ -324,6 +371,8 @@ for %err {%err_measures} '1 table per error measure
 		
 		%horizon = @str(!col)
 		'Absolute Errors
+		!MFE = @mean(v_lev_{%horizon})
+		!medFE = @median(v_lev_{%horizon})
 		!MAE  = @mean(@abs(v_lev_{%horizon}))
 		!MSE = @mean(@epow(v_lev_{%horizon},2))
 		!MSFE = !MSE 'some people use different terms
@@ -411,7 +460,7 @@ if !keep_matrices then
 		{%mat}.setattr(Series) {%depvar}
 		{%mat}.setattr(Estimation_Object) {%eq}
 		
-		'Set row labels (this is tedious)
+		'Set row labels to wf dates (this is tedious)
 		!obs = @obsrange
 		%sv = @getnextname("sv_tmp")
 		svector(!obs) {%sv}

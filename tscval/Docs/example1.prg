@@ -15,12 +15,12 @@
 	'Estimate a few differerent models
 	equation eq_01.ls d(indpro) c ar(1)
 	equation eq_02.ls d(indpro) c ar(1) ar(2) ma(1)
-	equation eq_03.ls indpro c @trend @trend^2
+	equation eq_03.ls indpro c ar(1)
 	
 	'Cross validate each
 	%eqs = @wlookup("EQ_*", "equation")
 	for %eq {%eqs}
-		{%eq}.tscval(ERR="MAE MSE MAPE medSE medAE SMAPE medPE medSPE", KEEP_MATS=t)
+		{%eq}.tscval(ERR="MAE MSE MAPE medSE medAE SMAPE medPE medSPE", KEEP_MATS=t, VAR_FORM=CURRENT)
 	next
 		
 

@@ -11,6 +11,7 @@
 		seterr "EViews version 9.0 or higher is required to run this add-in."
 	endif
 	
+	'--- Get arguments ---'
 	'--- Option 1: The full range we train and evaluate models over ---'
 	if @equaloption("SAMPLE")<>"" then 
 		%fullsample  = @equaloption("SAMPLE")

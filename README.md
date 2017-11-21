@@ -2,12 +2,12 @@
 
 A repo to make some common tools and algorithms from machine learning pipelines available as EViews add-ins.
 
-###Collaborators:
+### Collaborators:
 
 - James Lamb (Uptake)
 - Rita Linets (Wayfair)
 
-###Installing EViews Add-ins
+### Installing EViews Add-ins
 
 The instructions below describe installing the tscval add-in. NOTE: requires EViews 9.0 or greater.
 
